@@ -909,12 +909,14 @@ function todayCard(m){
     foot=`Kicks off <span class="hl">${m.ko}</span> · <span class="cd" data-kick="${m.kickoffMs}">in …</span>`;
   }else if(m.name==='STATUS_DELAYED'){
     dotCls=cardCls='delay';
-    const since=delaySince[delayId(m)]||0;
     const half=m.period===1?'1st half':m.period===2?'2nd half':'play';
-    badge=`<span class="tl-badge delay"><span class="blip"></span>Delayed${since?' · <span data-delay="'+since+'">…</span>':''}</span>`;
-    foot=`<span class="amber">Match delayed</span> · paused in ${half} at <span class="hl">${fmtClockFriendly(m.clock)||'—'}</span>`+
-         (since?` · delayed <span class="cd" data-delay="${since}">…</span> <span class="dim">(since first seen)</span>`:'')+
-         `<br><span class="dim">Reason &amp; official restart time aren’t provided by the data feed.</span>`;
+    // Soccer's clock runs continuously in real time, so the frozen match clock
+    // marks the wall-clock instant play was halted: kickoff + elapsed match time
+    // (+ the 15-min half-time interval once the 2nd half is under way).
+    const stopMs=m.kickoffMs+((m.period>=2?HALFTIME_MIN*60:0)+(m.fh.total||0)*60)*1000;
+    badge=`<span class="tl-badge delay"><span class="blip"></span>Delayed · <span data-hold="${stopMs}">…</span></span>`;
+    foot=`<span class="amber">Match delayed</span> · paused in ${half} at <span class="hl">${fmtClockFriendly(m.clock)||'—'}</span> · on hold for <span class="cd" data-hold="${stopMs}">…</span>`+
+         `<br><span class="dim">Estimated from kickoff and the stoppage point${m.period>=2?' (incl. 15-min half-time)':''}; the feed gives no official reason or restart time.</span>`;
   }else if(m.isHT){
     dotCls=cardCls='ht'; badge='<span class="tl-badge ht">Halftime</span>';
     foot=`<span class="amber">Halftime</span> · ${HALFTIME_MIN}-min interval · 1st half ran to <span class="hl">${fmtClockFriendly(m.clock)}</span><br>`+
@@ -938,22 +940,6 @@ function todayCard(m){
       <div class="tl-foot">${foot}</div>
     </div></div>`;
 }
-/* ===== delay tracking (the feed gives no duration, so we measure locally) ===== */
-let delaySince=loadDelays();
-function loadDelays(){try{const s=localStorage.getItem('wc26delays');if(s)return JSON.parse(s);}catch(e){}return {};}
-function saveDelays(){try{localStorage.setItem('wc26delays',JSON.stringify(delaySince));}catch(e){}}
-function delayId(m){return (m.group||'?')+':'+m.home.ab+'-'+m.away.ab;}
-function trackDelays(){
-  const list=Array.isArray(STATE.today)?STATE.today:[];
-  const active={};
-  list.forEach(m=>{
-    const id=delayId(m);
-    if(m.name==='STATUS_DELAYED'){active[id]=1; if(!delaySince[id]) delaySince[id]=Date.now();}
-    else if(delaySince[id]) delete delaySince[id];
-  });
-  Object.keys(delaySince).forEach(id=>{ if(!active[id]) delete delaySince[id]; });
-  saveDelays();
-}
 function renderToday(){
   const el=document.getElementById('todayList');
   if(STATE.today===null){el.innerHTML='<div class="board-empty">Loading today\u2019s matches…</div>';return;}
@@ -962,14 +948,13 @@ function renderToday(){
     let next='';Object.keys(STATE.groups).forEach(k=>STATE.groups[k].fix.forEach(f=>{if(!next||f.date<next)next=f.date;}));
     el.innerHTML=`<div class="board-empty">No matches today.${next?` Next up: <b style="color:var(--hi)">${fmtDate(next)}</b>.`:''}</div>`;return;
   }
-  trackDelays();
   el.innerHTML=STATE.today.map(todayCard).join(''); tick();
 }
 function tick(){
   const now=Date.now();
   document.querySelectorAll('[data-kick]').forEach(el=>{const ms=+el.dataset.kick-now;el.textContent=ms<=0?'starting…':'in '+fmtDur(ms);});
   document.querySelectorAll('[data-htend]').forEach(el=>{const ms=+el.dataset.htend-now;el.textContent=ms<=0?'(2nd half imminent)':'(in '+fmtMMSS(ms)+')';});
-  document.querySelectorAll('[data-delay]').forEach(el=>{el.textContent=fmtDur(now-+el.dataset.delay);});
+  document.querySelectorAll('[data-hold]').forEach(el=>{el.textContent=fmtDur(Math.max(0,now-+el.dataset.hold));});
 }
 setInterval(tick,1000);
 
