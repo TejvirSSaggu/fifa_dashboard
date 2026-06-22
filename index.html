@@ -834,7 +834,7 @@ function renderBoard(){
   const el=document.getElementById('board');
   if(!rows.length){el.innerHTML='<div class="board-empty">No teams in must-not-lose territory right now — refresh, or change the filter.</div>';return;}
   el.innerHTML=rows.map((r,i)=>{
-    const du=daysUntil(r.next.f.date),when=du<=0?'NOW':String(du),soon=du<=2?'soon':'';const [pc,pl]=PILL[r.level];
+    const du=daysUntil(r.next.f.date),when=du<=0?'TODAY':String(du),soon=du<=2?'soon':'';const [pc,pl]=PILL[r.level];
     return `<div class="board-row" data-lvl="${r.level}" style="animation-delay:${Math.min(i*45,520)}ms">
       <div class="br-rank ${i<3?'top':''}">${String(i+1).padStart(2,'0')}</div>
       <div class="br-match"><div class="br-team">${r.team.name}</div><div class="br-vs">vs <span class="o">${r.oppName}</span> · ${r.team.pts} pts now</div></div>
