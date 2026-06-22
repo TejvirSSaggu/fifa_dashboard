@@ -205,10 +205,13 @@
   .tl-dot{width:13px;height:13px;border-radius:50%;background:var(--dim);border:2px solid var(--bg);margin-top:8px;z-index:1}
   .tl-dot.live{background:var(--crit);box-shadow:0 0 0 0 rgba(228,0,43,.5);animation:pulse 1.6s infinite}
   .tl-dot.ht{background:var(--warn)} .tl-dot.ft{background:var(--through)} .tl-dot.pre{background:var(--flood)}
+  .tl-dot.delay{background:#7A2DA5;animation:pulseP 1.6s infinite}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(228,0,43,.45)}70%{box-shadow:0 0 0 9px rgba(228,0,43,0)}100%{box-shadow:0 0 0 0 rgba(228,0,43,0)}}
+  @keyframes pulseP{0%{box-shadow:0 0 0 0 rgba(122,45,165,.45)}70%{box-shadow:0 0 0 9px rgba(122,45,165,0)}100%{box-shadow:0 0 0 0 rgba(122,45,165,0)}}
   .tl-card{background:linear-gradient(180deg,#FFFFFF,#F7F8FC);border:1px solid var(--line);border-radius:13px;padding:13px 16px;margin:6px 0 12px 8px;transition:.2s}
   .tl-card.live{border-color:rgba(228,0,43,.30);box-shadow:0 0 24px rgba(228,0,43,.06)}
   .tl-card.ht{border-color:rgba(212,133,10,.30)}
+  .tl-card.delay{border-color:rgba(122,45,165,.32);box-shadow:0 0 24px rgba(122,45,165,.06)}
   .tl-card.pre{opacity:.9}
   .tl-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
   .tl-grp{font-family:var(--font-data);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
@@ -219,6 +222,8 @@
   .tl-badge.live .blip{width:6px;height:6px;border-radius:50%;background:var(--crit);animation:pulse 1.6s infinite}
   .tl-badge.ht{background:rgba(255,184,28,.14);color:#8B6200}
   .tl-badge.ft{background:rgba(0,154,68,.10);color:#00713E}
+  .tl-badge.delay{background:rgba(122,45,165,.12);color:#7A2DA5}
+  .tl-badge.delay .blip{width:6px;height:6px;border-radius:50%;background:#7A2DA5;animation:pulseP 1.6s infinite}
   .tl-teams{display:flex;flex-direction:column;gap:7px}
   .tl-tm{display:grid;grid-template-columns:36px 1fr auto;gap:10px;align-items:center}
   .tl-tm .ab{font-family:var(--font-data);font-weight:700;font-size:12px;color:var(--mid)}
@@ -230,6 +235,7 @@
   .tl-foot .hl{color:var(--hi);font-weight:700}
   .tl-foot .cd{color:var(--flood)}
   .tl-foot .amber{color:var(--warn)}
+  .tl-foot .dim{color:var(--dim)}
   @media (max-width:560px){.tl-row{grid-template-columns:64px 1fr}.tl-time{font-size:12px}.tl-tm .nm{font-size:15px}}
 
   .legend{display:flex;flex-wrap:wrap;gap:18px;margin:14px 0 2px;font-size:12px;color:var(--mid)}
@@ -901,6 +907,14 @@ function todayCard(m){
   if(m.state==='pre'){
     dotCls=cardCls='pre'; badge='<span class="tl-badge pre">Upcoming</span>';
     foot=`Kicks off <span class="hl">${m.ko}</span> · <span class="cd" data-kick="${m.kickoffMs}">in …</span>`;
+  }else if(m.name==='STATUS_DELAYED'){
+    dotCls=cardCls='delay';
+    const since=delaySince[delayId(m)]||0;
+    const half=m.period===1?'1st half':m.period===2?'2nd half':'play';
+    badge=`<span class="tl-badge delay"><span class="blip"></span>Delayed${since?' · <span data-delay="'+since+'">…</span>':''}</span>`;
+    foot=`<span class="amber">Match delayed</span> · paused in ${half} at <span class="hl">${fmtClockFriendly(m.clock)||'—'}</span>`+
+         (since?` · delayed <span class="cd" data-delay="${since}">…</span> <span class="dim">(since first seen)</span>`:'')+
+         `<br><span class="dim">Reason &amp; official restart time aren’t provided by the data feed.</span>`;
   }else if(m.isHT){
     dotCls=cardCls='ht'; badge='<span class="tl-badge ht">Halftime</span>';
     foot=`<span class="amber">Halftime</span> · ${HALFTIME_MIN}-min interval · 1st half ran to <span class="hl">${fmtClockFriendly(m.clock)}</span><br>`+
@@ -924,6 +938,22 @@ function todayCard(m){
       <div class="tl-foot">${foot}</div>
     </div></div>`;
 }
+/* ===== delay tracking (the feed gives no duration, so we measure locally) ===== */
+let delaySince=loadDelays();
+function loadDelays(){try{const s=localStorage.getItem('wc26delays');if(s)return JSON.parse(s);}catch(e){}return {};}
+function saveDelays(){try{localStorage.setItem('wc26delays',JSON.stringify(delaySince));}catch(e){}}
+function delayId(m){return (m.group||'?')+':'+m.home.ab+'-'+m.away.ab;}
+function trackDelays(){
+  const list=Array.isArray(STATE.today)?STATE.today:[];
+  const active={};
+  list.forEach(m=>{
+    const id=delayId(m);
+    if(m.name==='STATUS_DELAYED'){active[id]=1; if(!delaySince[id]) delaySince[id]=Date.now();}
+    else if(delaySince[id]) delete delaySince[id];
+  });
+  Object.keys(delaySince).forEach(id=>{ if(!active[id]) delete delaySince[id]; });
+  saveDelays();
+}
 function renderToday(){
   const el=document.getElementById('todayList');
   if(STATE.today===null){el.innerHTML='<div class="board-empty">Loading today\u2019s matches…</div>';return;}
@@ -932,12 +962,14 @@ function renderToday(){
     let next='';Object.keys(STATE.groups).forEach(k=>STATE.groups[k].fix.forEach(f=>{if(!next||f.date<next)next=f.date;}));
     el.innerHTML=`<div class="board-empty">No matches today.${next?` Next up: <b style="color:var(--hi)">${fmtDate(next)}</b>.`:''}</div>`;return;
   }
+  trackDelays();
   el.innerHTML=STATE.today.map(todayCard).join(''); tick();
 }
 function tick(){
   const now=Date.now();
   document.querySelectorAll('[data-kick]').forEach(el=>{const ms=+el.dataset.kick-now;el.textContent=ms<=0?'starting…':'in '+fmtDur(ms);});
   document.querySelectorAll('[data-htend]').forEach(el=>{const ms=+el.dataset.htend-now;el.textContent=ms<=0?'(2nd half imminent)':'(in '+fmtMMSS(ms)+')';});
+  document.querySelectorAll('[data-delay]').forEach(el=>{el.textContent=fmtDur(now-+el.dataset.delay);});
 }
 setInterval(tick,1000);
 
