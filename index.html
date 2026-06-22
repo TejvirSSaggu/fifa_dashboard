@@ -255,6 +255,8 @@
   .lb-badge{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-data);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:5px 14px;border-radius:999px;background:rgba(228,0,43,.10);color:#CC0028}
   .lb-badge .lb-dot{width:8px;height:8px;border-radius:50%;background:#E4002B;animation:pulse 1.5s infinite}
   .lb-badge.ht-badge{background:rgba(255,184,28,.14);color:#8B6200}
+  .lb-badge.delay-badge{background:rgba(122,45,165,.12);color:#7A2DA5}
+  .lb-badge.delay-badge .lb-dot{background:#7A2DA5;animation:pulseP 1.5s infinite}
   .lb-score-row{display:flex;align-items:center;justify-content:center;gap:20px;padding:24px 22px 12px}
   .lb-team{text-align:center;min-width:120px}
   .lb-team .lb-abbr{font-family:var(--font-data);font-size:11px;font-weight:700;color:var(--dim);letter-spacing:.1em}
@@ -761,6 +763,12 @@ function renderLiveBanner(){
       const resultTxt=draw?'Draw':hW?m.home.nm+' win':m.away.nm+' win';
       detailHTML=`<div class="lb-detail">Final score · ${resultTxt} · ${m.ko}</div>`;
       borderStyle='border-color:rgba(0,154,68,.30)';
+    } else if(m.name==='STATUS_DELAYED'){
+      const half=m.period===1?'1st half':m.period===2?'2nd half':'play';
+      const stopMs=m.kickoffMs+((m.period>=2?HALFTIME_MIN*60:0)+(m.fh&&m.fh.total||0)*60)*1000;
+      badgeHTML=`<span class="lb-badge delay-badge"><span class="lb-dot"></span>Delayed · <span data-hold="${stopMs}">…</span></span>`;
+      detailHTML=`<div class="lb-detail">Paused in ${half} at ${clockTxt||'—'} · on hold for <span data-hold="${stopMs}">…</span> · ${m.ko}</div>`;
+      borderStyle='border-color:rgba(122,45,165,.40);box-shadow:0 4px 24px rgba(122,45,165,.10)';
     } else {
       const half=m.period===1?'1st half':m.period===2?'2nd half':m.isHT?'Halftime':'In play';
       const badgeCls=m.isHT?'lb-badge ht-badge':'lb-badge';
