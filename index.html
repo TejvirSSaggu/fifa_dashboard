@@ -206,12 +206,14 @@
   .tl-dot.live{background:var(--crit);box-shadow:0 0 0 0 rgba(228,0,43,.5);animation:pulse 1.6s infinite}
   .tl-dot.ht{background:var(--warn)} .tl-dot.ft{background:var(--through)} .tl-dot.pre{background:var(--flood)}
   .tl-dot.delay{background:#7A2DA5;animation:pulseP 1.6s infinite}
+  .tl-dot.off{background:var(--dim)}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(228,0,43,.45)}70%{box-shadow:0 0 0 9px rgba(228,0,43,0)}100%{box-shadow:0 0 0 0 rgba(228,0,43,0)}}
   @keyframes pulseP{0%{box-shadow:0 0 0 0 rgba(122,45,165,.45)}70%{box-shadow:0 0 0 9px rgba(122,45,165,0)}100%{box-shadow:0 0 0 0 rgba(122,45,165,0)}}
   .tl-card{background:linear-gradient(180deg,#FFFFFF,#F7F8FC);border:1px solid var(--line);border-radius:13px;padding:13px 16px;margin:6px 0 12px 8px;transition:.2s}
   .tl-card.live{border-color:rgba(228,0,43,.30);box-shadow:0 0 24px rgba(228,0,43,.06)}
   .tl-card.ht{border-color:rgba(212,133,10,.30)}
   .tl-card.delay{border-color:rgba(122,45,165,.32);box-shadow:0 0 24px rgba(122,45,165,.06)}
+  .tl-card.off{border-color:var(--line);opacity:.85}
   .tl-card.pre{opacity:.9}
   .tl-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
   .tl-grp{font-family:var(--font-data);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
@@ -224,6 +226,7 @@
   .tl-badge.ft{background:rgba(0,154,68,.10);color:#00713E}
   .tl-badge.delay{background:rgba(122,45,165,.12);color:#7A2DA5}
   .tl-badge.delay .blip{width:6px;height:6px;border-radius:50%;background:#7A2DA5;animation:pulseP 1.6s infinite}
+  .tl-badge.off{background:rgba(113,128,150,.12);color:#4A5568}
   .tl-teams{display:flex;flex-direction:column;gap:7px}
   .tl-tm{display:grid;grid-template-columns:36px 1fr auto;gap:10px;align-items:center}
   .tl-tm .ab{font-family:var(--font-data);font-weight:700;font-size:12px;color:var(--mid)}
@@ -257,6 +260,7 @@
   .lb-badge.ht-badge{background:rgba(255,184,28,.14);color:#8B6200}
   .lb-badge.delay-badge{background:rgba(122,45,165,.12);color:#7A2DA5}
   .lb-badge.delay-badge .lb-dot{background:#7A2DA5;animation:pulseP 1.5s infinite}
+  .lb-badge.off-badge{background:rgba(113,128,150,.12);color:#4A5568}
   .lb-score-row{display:flex;align-items:center;justify-content:center;gap:20px;padding:24px 22px 12px}
   .lb-team{text-align:center;min-width:120px}
   .lb-team .lb-abbr{font-family:var(--font-data);font-size:11px;font-weight:700;color:var(--dim);letter-spacing:.1em}
@@ -525,6 +529,17 @@ function fmtClockFriendly(clockStr){
   return p.reg+' mins';
 }
 const HALFTIME_MIN=15; // FIFA Laws of the Game: interval not exceeding 15 minutes
+/* terminal "didn't finish normally" statuses (ESPN type names) → display label */
+const STOPPED={STATUS_POSTPONED:'Postponed',STATUS_ABANDONED:'Abandoned',STATUS_CANCELED:'Canceled',STATUS_CANCELLED:'Canceled'};
+const NOT_PLAYED=m=>m.name==='STATUS_POSTPONED'||m.name==='STATUS_CANCELED'||m.name==='STATUS_CANCELLED';
+function stoppedNote(m){
+  if(m.name==='STATUS_ABANDONED'){
+    const half=m.period===1?'1st half':m.period===2?'2nd half':'play';
+    return `Match abandoned in ${half} at ${fmtClockFriendly(m.clock)||'—'} — result may not stand.`;
+  }
+  if(m.name==='STATUS_POSTPONED') return 'Match postponed — not played; awaiting a rescheduled date.';
+  return 'Match canceled — not played.';
+}
 function localIsoFromDate(dt){return isoFromDate(dt);}
 function buildToday(sb, teamGroup){
   const today=todayLocalIso();
@@ -753,12 +768,18 @@ function renderLiveBanner(){
   if(!liveMatches.length){ el.innerHTML=''; return; }
 
   el.innerHTML=liveMatches.map(m=>{
-    const hW=m.home.sc>m.away.sc, aW=m.away.sc>m.home.sc, draw=m.home.sc===m.away.sc;
+    const stopped=!!STOPPED[m.name], notPlayed=NOT_PLAYED(m);
+    const hW=!stopped&&m.home.sc>m.away.sc, aW=!stopped&&m.away.sc>m.home.sc, draw=m.home.sc===m.away.sc;
+    const scH=notPlayed?'–':m.home.sc, scA=notPlayed?'–':m.away.sc;
     const clockTxt=fmtClockFriendly(m.clock)||'';
     const gk=m.group||'';
 
     let badgeHTML, detailHTML, borderStyle;
-    if(isFinished){
+    if(stopped){
+      badgeHTML=`<span class="lb-badge off-badge">${STOPPED[m.name]}</span>`;
+      detailHTML=`<div class="lb-detail">${stoppedNote(m)} · ${m.ko}</div>`;
+      borderStyle='border-color:rgba(113,128,150,.30);box-shadow:none';
+    } else if(isFinished){
       badgeHTML=`<span class="lb-badge" style="background:rgba(0,154,68,.10);color:#00713E">Full Time</span>`;
       const resultTxt=draw?'Draw':hW?m.home.nm+' win':m.away.nm+' win';
       detailHTML=`<div class="lb-detail">Final score · ${resultTxt} · ${m.ko}</div>`;
@@ -783,7 +804,7 @@ function renderLiveBanner(){
     const currentResult=hW?'H':aW?'A':'D';
     const currentLabel=hW?m.home.nm+' win':aW?m.away.nm+' win':'Draw';
     const holdText=isFinished?'Result — '+currentLabel:'If this result holds — '+currentLabel;
-    if(gk && DG[gk]){
+    if(!stopped && gk && DG[gk]){
       const g=DG[gk];
       const fIdx=g.fix.findIndex(f=>f.h===m.home.ab&&f.a===m.away.ab);
       if(fIdx>=0){
@@ -806,7 +827,7 @@ function renderLiveBanner(){
 
     return `<div class="live-banner" style="${borderStyle}">
       <div class="lb-top">
-        <div class="lb-grp">Group <b>${gk||'—'}</b>${isFinished?' · Latest Result':''}</div>
+        <div class="lb-grp">Group <b>${gk||'—'}</b>${isFinished&&!stopped?' · Latest Result':''}</div>
         ${badgeHTML}
       </div>
       <div class="lb-score-row">
@@ -814,9 +835,9 @@ function renderLiveBanner(){
           <div class="lb-abbr">${m.home.ab}</div>
           <div class="lb-name">${m.home.nm}</div>
         </div>
-        <span class="lb-sc">${m.home.sc}</span>
+        <span class="lb-sc">${scH}</span>
         <span class="lb-dash">–</span>
-        <span class="lb-sc">${m.away.sc}</span>
+        <span class="lb-sc">${scA}</span>
         <div class="lb-team ${aW?'winner':hW?'loser':''}">
           <div class="lb-abbr">${m.away.ab}</div>
           <div class="lb-name">${m.away.nm}</div>
@@ -908,8 +929,9 @@ function fmtMMSS(ms){if(ms<0)ms=0;const s=Math.floor(ms/1000);return Math.floor(
 function timeOf(ms){return koFromDate(new Date(ms));}
 
 function todayCard(m){
-  const lead=m.state!=='pre'&&m.home.sc!==m.away.sc, hLead=lead&&m.home.sc>m.away.sc, aLead=lead&&m.away.sc>m.home.sc;
-  const showH=m.state==='pre'?0:m.home.sc, showA=m.state==='pre'?0:m.away.sc;
+  const stopped=!!STOPPED[m.name], notPlayed=NOT_PLAYED(m);
+  const lead=!stopped&&m.state!=='pre'&&m.home.sc!==m.away.sc, hLead=lead&&m.home.sc>m.away.sc, aLead=lead&&m.away.sc>m.home.sc;
+  const showH=notPlayed?'–':(m.state==='pre'?0:m.home.sc), showA=notPlayed?'–':(m.state==='pre'?0:m.away.sc);
   const p=m.ko.split(' '), railTime=p[0], railSub=((p[1]||'')+' '+(p[2]||'')).trim();
   let dotCls,cardCls,badge,foot;
   if(m.state==='pre'){
@@ -925,6 +947,10 @@ function todayCard(m){
     badge=`<span class="tl-badge delay"><span class="blip"></span>Delayed · <span data-hold="${stopMs}">…</span></span>`;
     foot=`<span class="amber">Match delayed</span> · paused in ${half} at <span class="hl">${fmtClockFriendly(m.clock)||'—'}</span> · on hold for <span class="cd" data-hold="${stopMs}">…</span>`+
          `<br><span class="dim">Estimated from kickoff and the stoppage point${m.period>=2?' (incl. 15-min half-time)':''}; the feed gives no official reason or restart time.</span>`;
+  }else if(stopped){
+    dotCls=cardCls='off';
+    badge=`<span class="tl-badge off">${STOPPED[m.name]}</span>`;
+    foot=`<span class="dim">${stoppedNote(m)}</span>`;
   }else if(m.isHT){
     dotCls=cardCls='ht'; badge='<span class="tl-badge ht">Halftime</span>';
     foot=`<span class="amber">Halftime</span> · ${HALFTIME_MIN}-min interval · 1st half ran to <span class="hl">${fmtClockFriendly(m.clock)}</span><br>`+
