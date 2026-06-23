@@ -60,6 +60,9 @@
   .stat .n{font-family:var(--font-display);font-weight:800;font-size:30px;line-height:1}
   .stat .k{font-family:var(--font-data);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--dim);margin-top:3px}
   .stat.red .n{color:var(--crit)} .stat.green .n{color:var(--through)} .stat.gold .n{color:var(--gold)} .stat.blue .n{color:var(--flood)}
+  .stat.clickable{cursor:pointer;transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease}
+  .stat.clickable:hover{transform:translateY(-2px);border-color:var(--mid);box-shadow:0 4px 14px rgba(0,0,0,.10)}
+  .stat.clickable .k::after{content:' ↓';opacity:.55}
 
   .sec-head{display:flex;align-items:baseline;gap:14px;margin:38px 0 14px;flex-wrap:wrap}
   .sec-head h2{font-family:var(--font-display);font-weight:700;text-transform:uppercase;font-size:clamp(20px,3vw,28px);letter-spacing:.02em;margin:0}
@@ -368,7 +371,7 @@
   <div class="rooting" id="rootingList"></div>
 
   <!-- 03 BOARD -->
-  <div class="sec-head"><span class="sec-num">03</span><h2>Must-Not-Lose Watch</h2>
+  <div class="sec-head" id="sec-board"><span class="sec-num">03</span><h2>Must-Not-Lose Watch</h2>
     <span class="sub">a loss in this match ends the team's top-two hopes — eliminated teams drop off automatically</span></div>
   <div class="controls">
     <div class="ctl-group"><span class="ctl-label">Show</span>
@@ -403,7 +406,7 @@
   </div>
 
   <!-- 05 GROUPS -->
-  <div class="sec-head"><span class="sec-num">05</span><h2>Standings &amp; Games Left</h2>
+  <div class="sec-head" id="sec-grid"><span class="sec-num">05</span><h2>Standings &amp; Games Left</h2>
     <span class="sub">gold = top-2 zone · eliminated teams struck through · settled groups sink to the bottom</span></div>
   <div class="controls">
     <span class="ctl-label">Trim list</span>
@@ -855,11 +858,15 @@ function renderSummary(){
   const rem=groupKeysSorted().reduce((n,k)=>n+DG[k].fix.length,0);
   document.getElementById('critCount').textContent=danger;
   document.getElementById('summary').innerHTML=
-   `<div class="stat red"><div class="n">${danger}</div><div class="k">Must-not-lose</div></div>
-    <div class="stat green"><div class="n">${thru}</div><div class="k">Through</div></div>
+   `<div class="stat red clickable" data-scroll="sec-board"><div class="n">${danger}</div><div class="k">Must-not-lose</div></div>
+    <div class="stat green clickable" data-scroll="sec-grid"><div class="n">${thru}</div><div class="k">Through</div></div>
     <div class="stat"><div class="n" style="color:var(--out)">${out}</div><div class="k">Knocked out</div></div>
-    <div class="stat gold"><div class="n">${settled}</div><div class="k">Groups settled</div></div>
-    <div class="stat blue"><div class="n">${rem}</div><div class="k">Games remaining</div></div>`;
+    <div class="stat gold clickable" data-scroll="sec-grid"><div class="n">${settled}</div><div class="k">Groups settled</div></div>
+    <div class="stat blue clickable" data-scroll="sec-grid"><div class="n">${rem}</div><div class="k">Games remaining</div></div>`;
+  document.querySelectorAll('#summary .stat[data-scroll]').forEach(s=>s.onclick=()=>{
+    const t=document.getElementById(s.dataset.scroll);
+    if(t)t.scrollIntoView({behavior:'smooth',block:'start'});
+  });
 }
 function renderBoard(){
   let rows=ALL.filter(r=>DANGER.includes(r.level));
