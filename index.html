@@ -75,6 +75,8 @@
   .chip[aria-pressed="true"]{background:var(--flood);border-color:var(--flood);color:#fff;font-weight:700}
   .chip.warn[aria-pressed="true"]{background:var(--warn);border-color:var(--warn);color:#fff}
   .chip.danger{border-color:rgba(228,0,43,.35);color:var(--crit)}
+  .chip.jump{border-color:rgba(0,154,68,.4);color:#00713E}
+  .chip.jump:hover{background:rgba(0,154,68,.08);border-color:var(--through)}
   .chip.danger:hover{background:rgba(228,0,43,.06)}
   .ctl-label{font-family:var(--font-data);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin-right:4px}
   .ctl-group{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -415,6 +417,7 @@
       <h1><span id="phaseTitle">Group Stage</span><br><span class="thin" id="phaseSub">Survival Board</span></h1>
       <div class="refresh-row">
         <button class="rbtn" id="refreshBtn"><span class="ic">↻</span> Refresh live data</button>
+        <button class="chip jump" onclick="document.getElementById('sec-thirds').scrollIntoView({behavior:'smooth',block:'start'})">↓ Best 3rd-place race</button>
         <span class="lstat" id="liveStatus"><span class="led"></span><span class="msg">Loading…</span></span>
       </div>
     </div>
