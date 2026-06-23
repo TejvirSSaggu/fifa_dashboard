@@ -656,6 +656,11 @@ function fmtClockFriendly(clockStr){
   if(p.add) return p.reg+' mins +'+p.add+' mins';
   return p.reg+' mins';
 }
+// ESPN's displayClock reports the stoppage minute IN PROGRESS (e.g. "90'+8'" during the 8th added
+// minute). While a match is actually in play we show the COMPLETED added minutes (one less) so it
+// matches the running match clock; halftime/finished keep the official figure.
+function liveAddedMin(m){const a=parseClock(m.clock).add;return (m.state==='in'&&!m.isHT&&a>0)?a-1:a;}
+function liveClockText(m){const reg=parseClock(m.clock).reg,add=liveAddedMin(m);return add?reg+' mins +'+add+' mins':reg+' mins';}
 const HALFTIME_MIN=15; // FIFA Laws of the Game: interval not exceeding 15 minutes
 /* terminal "didn't finish normally" statuses (ESPN type names) → display label */
 const STOPPED={STATUS_POSTPONED:'Postponed',STATUS_ABANDONED:'Abandoned',STATUS_CANCELED:'Canceled',STATUS_CANCELLED:'Canceled'};
@@ -1020,9 +1025,10 @@ function renderLiveBanner(){
     } else {
       const half=m.period===1?'1st half':m.period===2?'2nd half':m.isHT?'Halftime':'In play';
       const badgeCls=m.isHT?'lb-badge ht-badge':'lb-badge';
-      const badgeText=m.isHT?'Halftime':'Live '+clockTxt;
+      const liveTxt=m.isHT?clockTxt:liveClockText(m), addNow=liveAddedMin(m);
+      const badgeText=m.isHT?'Halftime':'Live '+liveTxt;
       badgeHTML=`<span class="${badgeCls}"><span class="lb-dot"></span>${badgeText}</span>`;
-      detailHTML=`<div class="lb-detail">${half} · ${clockTxt}${m.fh&&m.fh.add?' (+'+m.fh.add+' mins added)':''} · ${m.ko}</div>`;
+      detailHTML=`<div class="lb-detail">${half} · ${liveTxt}${(!m.isHT&&addNow)?' (+'+addNow+' mins added)':''} · ${m.ko}</div>`;
       borderStyle='border-color:rgba(228,0,43,.35)';
     }
 
@@ -1353,9 +1359,10 @@ function todayCard(m){
     foot=`<span class="amber">Halftime</span> · ${HALFTIME_MIN}-min interval · 1st half ran to <span class="hl">${fmtClockFriendly(m.clock)}</span><br>`+
          `2nd half ≈ <span class="hl">${timeOf(m.htEndMs)}</span> <span class="cd" data-htend="${m.htEndMs}">(in …)</span>`;
   }else if(m.state==='in'){
-    dotCls=cardCls='live'; badge=`<span class="tl-badge live"><span class="blip"></span>Live ${fmtClockFriendly(m.clock)||''}</span>`;
+    const liveTxt=liveClockText(m), addNow=liveAddedMin(m);
+    dotCls=cardCls='live'; badge=`<span class="tl-badge live"><span class="blip"></span>Live ${liveTxt}</span>`;
     const half=m.period===1?'1st half':m.period===2?'2nd half':'In play';
-    foot=`<span class="hl">${half} · ${fmtClockFriendly(m.clock)||''}</span>${m.fh.add?` <span class="amber">(+${m.fh.add} mins added)</span>`:''} · score updates live`;
+    foot=`<span class="hl">${half} · ${liveTxt}</span>${addNow?` <span class="amber">(+${addNow} mins added)</span>`:''} · score updates live`;
   }else{
     dotCls='ft'; cardCls=''; badge='<span class="tl-badge ft">Full Time</span>';
     foot=`<span class="hl">Full time</span> · played to <span class="hl">${fmtClockFriendly(m.clock)||'90 mins'}</span>${m.fh.add?` <span class="amber">(incl. +${m.fh.add} mins stoppage)</span>`:''}`;
