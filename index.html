@@ -661,13 +661,14 @@ function buildToday(sb, teamGroup){
     if(!home||!away) return null;
     const s=ev.status||{}, t=s.type||{};
     const ha=home.team.abbreviation, aa=away.team.abbreviation;
-    const key=teamGroup[ha]||teamGroup[aa]||'';
+    const slug=(ev.season&&ev.season.slug)||'';
+    const key=slug==='group-stage'?(teamGroup[ha]||teamGroup[aa]||''):'';   // knockout games aren't a group
     const kickoffMs=new Date(ev.date).getTime();
     const fh=parseClock(s.displayClock);
     const isHT=(t.name==='STATUS_HALFTIME'||t.description==='Halftime');
     const htEndMs=isHT ? kickoffMs + fh.total*60000 + HALFTIME_MIN*60000 : null;
     return {
-      group:key, kickoffMs, ko:koFromDate(new Date(ev.date)),
+      group:key, isKO:slug!=='group-stage', stage:stageLabel(slug,teamGroup[ha]||teamGroup[aa]||''), kickoffMs, ko:koFromDate(new Date(ev.date)),
       state:t.state||'pre', name:t.name||'', desc:t.description||'', isHT,
       clock:s.displayClock||'', period:s.period||0, fh,
       htEndMs,
@@ -711,6 +712,8 @@ const KO_ROUNDS=[
   {slug:'final',          code:'FINAL',label:'Final'},
 ];
 const KO_CODE={}; KO_ROUNDS.forEach(r=>KO_CODE[r.slug]=r.code);
+const KO_SLUG_LABEL={}; KO_ROUNDS.forEach(r=>KO_SLUG_LABEL[r.slug]=r.label);
+function stageLabel(slug,groupKey){return KO_SLUG_LABEL[slug]||(groupKey?'Group '+groupKey:'Match');}
 function buildKnockout(sb){
   return (sb.events||[]).map(ev=>{
     const code=KO_CODE[ev.season&&ev.season.slug]; if(!code) return null;
@@ -1035,7 +1038,7 @@ function renderLiveBanner(){
 
     return `<div class="live-banner" style="${borderStyle}">
       <div class="lb-top">
-        <div class="lb-grp">Group <b>${gk||'—'}</b>${isFinished&&!stopped?' · Latest Result':''}</div>
+        <div class="lb-grp">${m.isKO?m.stage:('Group <b>'+(gk||'—')+'</b>')}${isFinished&&!stopped?' · Latest Result':''}</div>
         ${badgeHTML}
       </div>
       <div class="lb-score-row">
@@ -1058,20 +1061,38 @@ function renderLiveBanner(){
 }
 
 function renderSummary(){
-  const danger=ALL.filter(r=>DANGER.includes(r.level)).length, out=ALL.filter(r=>r.level==='OUT').length, thru=ALL.filter(r=>r.level==='THROUGH').length;
-  const settled=groupKeysSorted().filter(k=>CLS[k].every(r=>r.level==='THROUGH'||r.level==='OUT')).length;
-  const rem=groupKeysSorted().reduce((n,k)=>n+DG[k].fix.length,0);
-  document.getElementById('critCount').textContent=danger;
-  document.getElementById('summary').innerHTML=
-   `<div class="stat red clickable" data-scroll="sec-board"><div class="n">${danger}</div><div class="k">Must-not-lose</div></div>
-    <div class="stat green clickable" data-scroll="sec-grid"><div class="n">${thru}</div><div class="k">Through</div></div>
-    <div class="stat clickable" data-scroll="sec-grid"><div class="n" style="color:var(--out)">${out}</div><div class="k">Knocked out</div></div>
-    <div class="stat gold clickable" data-scroll="sec-grid"><div class="n">${settled}</div><div class="k">Groups settled</div></div>
-    <div class="stat blue clickable" data-scroll="sec-grid"><div class="n">${rem}</div><div class="k">Games remaining</div></div>`;
+  document.getElementById('summary').innerHTML = STAGE_COMPLETE ? knockoutSummaryHTML() : groupSummaryHTML();
   document.querySelectorAll('#summary .stat[data-scroll]').forEach(s=>s.onclick=()=>{
     const t=document.getElementById(s.dataset.scroll);
     if(t)t.scrollIntoView({behavior:'smooth',block:'start'});
   });
+}
+function groupSummaryHTML(){
+  const danger=ALL.filter(r=>DANGER.includes(r.level)).length, out=ALL.filter(r=>r.level==='OUT').length, thru=ALL.filter(r=>r.level==='THROUGH').length;
+  const settled=groupKeysSorted().filter(k=>CLS[k].every(r=>r.level==='THROUGH'||r.level==='OUT')).length;
+  const rem=groupKeysSorted().reduce((n,k)=>n+DG[k].fix.length,0);
+  document.getElementById('critCount').textContent=danger;
+  return `<div class="stat red clickable" data-scroll="sec-board"><div class="n">${danger}</div><div class="k">Must-not-lose</div></div>
+    <div class="stat green clickable" data-scroll="sec-grid"><div class="n">${thru}</div><div class="k">Through</div></div>
+    <div class="stat clickable" data-scroll="sec-grid"><div class="n" style="color:var(--out)">${out}</div><div class="k">Knocked out</div></div>
+    <div class="stat gold clickable" data-scroll="sec-grid"><div class="n">${settled}</div><div class="k">Groups settled</div></div>
+    <div class="stat blue clickable" data-scroll="sec-grid"><div class="n">${rem}</div><div class="k">Games remaining</div></div>`;
+}
+function knockoutSummaryHTML(){
+  const ko=STATE.knockout||[], today=todayLocalIso();
+  const elimRounds=ko.filter(m=>m.round!=='3RD');               // the 3rd-place game doesn't eliminate toward the title
+  const eliminated=elimRounds.filter(m=>m.decided).length;     // each decided tie knocks one team out
+  const teamsLeft=Math.max(1,32-eliminated);
+  const liveNow=ko.filter(m=>m.state==='in').length;
+  const tiesToday=ko.filter(m=>m.date===today).length;
+  const facingToday=ko.filter(m=>m.date===today&&m.state!=='post').length*2;
+  const matchesLeft=ko.filter(m=>!m.decided).length;
+  document.getElementById('critCount').textContent= facingToday||teamsLeft;
+  return `<div class="stat blue clickable" data-scroll="sec-korounds"><div class="n">${teamsLeft}</div><div class="k">Teams left</div></div>
+    <div class="stat red clickable" data-scroll="sec-kowatch"><div class="n">${liveNow}</div><div class="k">In play now</div></div>
+    <div class="stat gold clickable" data-scroll="sec-kowatch"><div class="n">${tiesToday}</div><div class="k">Ties today</div></div>
+    <div class="stat clickable" data-scroll="sec-korounds"><div class="n" style="color:var(--out)">${eliminated}</div><div class="k">Eliminated</div></div>
+    <div class="stat green clickable" data-scroll="sec-final"><div class="n">${matchesLeft}</div><div class="k">Matches to title</div></div>`;
 }
 function renderBoard(){
   let rows=ALL.filter(r=>DANGER.includes(r.level));
@@ -1324,7 +1345,7 @@ function todayCard(m){
   return `<div class="tl-row">
     <div class="tl-rail"><div class="tl-time">${railTime}<small>${railSub}</small></div><div class="tl-dot ${dotCls}"></div></div>
     <div class="tl-card ${cardCls}">
-      <div class="tl-top"><span class="tl-grp">Group <b>${m.group||'—'}</b></span>${badge}</div>
+      <div class="tl-top"><span class="tl-grp">${m.isKO?m.stage:('Group <b>'+(m.group||'—')+'</b>')}</span>${badge}</div>
       <div class="tl-teams">
         <div class="tl-tm ${hLead?'lead':(aLead?'dim':'')}"><span class="ab">${m.home.ab}</span><span class="nm">${m.home.nm}</span><span class="sc">${showH}</span></div>
         <div class="tl-tm ${aLead?'lead':(hLead?'dim':'')}"><span class="ab">${m.away.ab}</span><span class="nm">${m.away.nm}</span><span class="sc">${showA}</span></div>
