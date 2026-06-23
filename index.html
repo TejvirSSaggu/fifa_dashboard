@@ -496,6 +496,7 @@
     <span class="ctl-label">Trim list</span>
     <button class="chip warn" data-gtoggle="settled" aria-pressed="false">Hide settled groups</button>
     <button class="chip warn" data-gtoggle="elim" aria-pressed="false">Hide eliminated teams</button>
+    <button class="chip warn" data-gtoggle="through" aria-pressed="false">Through teams only</button>
   </div>
   <div class="grid" id="grid"></div>
 
@@ -950,7 +951,7 @@ function renderPhase(){
 /* ===== render ===== */
 const PILL={MUSTWIN:['mustwin','MUST WIN'],MUSTNOTLOSE:['mustnotlose','MUST NOT LOSE'],BRINK:['brink','ON THE BRINK'],STAKE:['stake','STAKES'],THIRD:['third','3RD CHASE'],THROUGH:['through','THROUGH'],OUT:['out','OUT']};
 const DANGER=['MUSTWIN','MUSTNOTLOSE','BRINK'];
-let boardFilter='all',boardSort='crit',gHideSettled=false,gHideElim=false,updOpen=false;
+let boardFilter='all',boardSort='crit',gHideSettled=false,gHideElim=false,gThroughOnly=false,updOpen=false;
 
 function groupKeysSorted(){return Object.keys(STATE.groups).sort();}
 
@@ -1140,7 +1141,7 @@ function renderGrid(){
     const settled=cls.every(r=>r.level==='THROUGH'||r.level==='OUT');
     const through=sorted.filter(t=>by[t.abbr].level==='THROUGH').map(t=>t.abbr);
     let rows='';
-    sorted.forEach((t,idx)=>{const r=by[t.abbr];if(gHideElim&&r.level==='OUT')return;let [pc,pl]=PILL[r.level];const nx=r.next;
+    sorted.forEach((t,idx)=>{const r=by[t.abbr];if(gHideElim&&r.level==='OUT')return;if(gThroughOnly&&r.level!=='THROUGH')return;let [pc,pl]=PILL[r.level];const nx=r.next;
       if(r.level==='THIRD'&&r.thirdRank){pl=`3RD · ${r.thirdIn?'IN':'OUT'} (#${r.thirdRank})`;}
       const nextTxt=nx?`${fmtDate(nx.f.date).replace(/^[A-Z]+ /,'')} <span class="x">vs ${r.opp}</span>`:'group complete';
       const klass=`trow ${idx<2?'q':''} ${idx===1?'cut':''} ${r.level==='OUT'?'elim':''}`;
@@ -1153,7 +1154,8 @@ function renderGrid(){
     const mdLabel=allPlayed?'Complete':(g.teams.every(t=>g.fix.filter(f=>f.h===t.abbr||f.a===t.abbr).length===1)?'Final matchday':'Group stage');
     const lastDate=g.fix.reduce((m,f)=>f.date>m?f.date:m,'');
     const tag=settled?`<span class="tag">Settled · ${through.join(' · ')||'tbd'}</span>`:'';
-    const show=!(gHideSettled&&settled);
+    const hasThrough=cls.some(r=>r.level==='THROUGH');
+    const show=!(gHideSettled&&settled)&&!(gThroughOnly&&!hasThrough);
     return `<div class="card ${settled?'settled':''}" data-show="${show}">
       <div class="card-h"><div class="g">Group <span>${key}</span>${tag}</div><div class="md">${mdLabel}<b>${allPlayed?'done':(lastDate?'ends '+fmtDate(lastDate):'')}</b></div></div>
       <div class="ctable"><div class="thead"><span>Team</span><span>Pts</span><span>Status</span></div>${rows}</div></div>`;
@@ -1719,7 +1721,7 @@ function renderAll(){recompute();renderPhase();renderLiveBanner();renderSummary(
 /* ===== controls ===== */
 document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-filter]').forEach(x=>x.setAttribute('aria-pressed','false'));b.setAttribute('aria-pressed','true');boardFilter=b.dataset.filter;renderBoard();});
 document.querySelectorAll('[data-sort]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-sort]').forEach(x=>x.setAttribute('aria-pressed','false'));b.setAttribute('aria-pressed','true');boardSort=b.dataset.sort;renderBoard();});
-document.querySelectorAll('[data-gtoggle]').forEach(b=>b.onclick=()=>{const on=b.getAttribute('aria-pressed')==='true';b.setAttribute('aria-pressed',String(!on));if(b.dataset.gtoggle==='settled')gHideSettled=!on;else gHideElim=!on;renderGrid();});
+document.querySelectorAll('[data-gtoggle]').forEach(b=>b.onclick=()=>{const on=b.getAttribute('aria-pressed')==='true';b.setAttribute('aria-pressed',String(!on));const g=b.dataset.gtoggle;if(g==='settled')gHideSettled=!on;else if(g==='elim')gHideElim=!on;else if(g==='through')gThroughOnly=!on;renderGrid();});
 document.getElementById('updToggle').onclick=()=>{updOpen=!updOpen;document.getElementById('upd').classList.toggle('closed',!updOpen);};
 document.getElementById('updBody').addEventListener('click',e=>{const set=e.target.closest('[data-set]'),clr=e.target.closest('[data-clear]');
   if(set){const [id,r]=set.dataset.set.split('|');results[id]=r;save();renderAll();}else if(clr){delete results[clr.dataset.clear];save();renderAll();}});
