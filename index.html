@@ -321,6 +321,18 @@
   .tl-tm.lead .nm{color:#1A2138} .tl-tm.lead .sc{color:var(--through)}
   .tl-tm.dim .nm,.tl-tm.dim .ab,.tl-tm.dim .sc{color:var(--dim)}
   .tl-foot{margin-top:11px;padding-top:10px;border-top:1px solid rgba(50,98,149,.08);font-family:var(--font-data);font-size:11.5px;color:var(--mid);line-height:1.5}
+  .tl-verdict{margin-top:9px;padding:8px 11px;border-radius:9px;font-family:var(--font-data);font-size:12px;line-height:1.45;border:1px solid transparent}
+  .tl-verdict b{font-weight:700}
+  .tl-verdict.crit{background:rgba(228,0,43,.06);border-color:rgba(228,0,43,.2);color:#CC0028}
+  .tl-verdict.warn{background:rgba(212,133,10,.07);border-color:rgba(212,133,10,.22);color:#A8670A}
+  .tl-verdict.ok{background:rgba(0,154,68,.07);border-color:rgba(0,154,68,.22);color:#00713E}
+  .tl-verdict.neutral{background:rgba(50,98,149,.05);border-color:rgba(50,98,149,.14);color:var(--mid)}
+  .lb-verdict{margin:0 22px 16px;padding:10px 13px;border-radius:10px;text-align:center;font-family:var(--font-data);font-size:12.5px;line-height:1.45;border:1px solid transparent}
+  .lb-verdict b{font-weight:700}
+  .lb-verdict.crit{background:rgba(228,0,43,.07);border-color:rgba(228,0,43,.22);color:#CC0028}
+  .lb-verdict.warn{background:rgba(212,133,10,.08);border-color:rgba(212,133,10,.24);color:#A8670A}
+  .lb-verdict.ok{background:rgba(0,154,68,.08);border-color:rgba(0,154,68,.24);color:#00713E}
+  .lb-verdict.neutral{background:rgba(50,98,149,.05);border-color:rgba(50,98,149,.16);color:var(--mid)}
   .tl-foot .hl{color:var(--hi);font-weight:700}
   .tl-foot .cd{color:var(--flood)}
   .tl-foot .amber{color:var(--warn)}
@@ -1059,6 +1071,7 @@ function renderLiveBanner(){
         </div>
       </div>
       ${detailHTML}
+      ${(function(){const v=liveVerdict(m);return v?`<div class="lb-verdict ${v.cls}">${v.txt}</div>`:'';})()}
       ${impactHTML}
     </div>`;
   }).join('');
@@ -1356,6 +1369,7 @@ function todayCard(m){
         <div class="tl-tm ${aLead?'lead':(hLead?'dim':'')}"><span class="ab">${m.away.ab}</span><span class="nm">${m.away.nm}</span><span class="sc">${showA}</span></div>
       </div>
       <div class="tl-foot">${foot}</div>
+      ${(function(){const v=liveVerdict(m);return v?`<div class="tl-verdict ${v.cls}">${v.txt}</div>`:'';})()}
     </div></div>`;
 }
 function renderToday(){
@@ -1440,6 +1454,58 @@ function analyseMatch(groupKey, fixIdx){
   });
 
   return {groupKey, fix:f, hTeam, aTeam, scenarioResults};
+}
+
+/* ===== what the CURRENT scoreline means for the two teams (focus on the loser) ===== */
+// clone a group's standings with one extra result applied (for in-progress games not yet in the feed)
+function simGroupResult(gk,hAb,aAb,R){
+  const base=DG[gk];
+  const teams=base.teams.map(t=>({...t})),tm={};teams.forEach(t=>tm[t.abbr]=t);
+  if(R==='H'){tm[hAb].pts+=3;tm[hAb].w++;tm[aAb].l++;}
+  else if(R==='A'){tm[aAb].pts+=3;tm[aAb].w++;tm[hAb].l++;}
+  else{tm[hAb].pts++;tm[aAb].pts++;tm[hAb].d++;tm[aAb].d++;}
+  tm[hAb].gp++;tm[aAb].gp++;
+  return {teams,fix:base.fix,h2h:base.h2h};
+}
+function teamVerdictText(r){
+  const n=r.gamesLeft,gs=n+(n===1?' game':' games');
+  switch(r.level){
+    case 'OUT':         return 'eliminated';
+    case 'THROUGH':     return 'through to the next round';
+    case 'THIRD':       return 'top two gone — best-third lifeline only';
+    case 'MUSTWIN':     return 'survives — must win their last game to recover';
+    case 'MUSTNOTLOSE': return 'survives — must avoid defeat in '+gs+' left';
+    case 'BRINK':       return 'on the brink — '+gs+' left to recover';
+    default:            return 'survives — '+gs+' left to recover';
+  }
+}
+function verdictCls(level){return level==='OUT'?'crit':level==='THROUGH'?'ok':(level==='THIRD'||level==='MUSTWIN'||level==='MUSTNOTLOSE'||level==='BRINK')?'warn':'neutral';}
+// returns {txt, cls} or null when there's nothing meaningful to say
+function liveVerdict(m){
+  if(m.state==='pre'||NOT_PLAYED(m)||STOPPED[m.name])return null;
+  const hs=m.home.sc,as=m.away.sc;
+  if(m.isKO){                                            // single elimination — loser is simply out
+    if(hs===as)return {txt:'Level — extra time then penalties would decide who goes through',cls:'warn'};
+    const lo=hs<as?m.home:m.away,wi=hs<as?m.away:m.home;
+    const fin=m.state!=='in'?'':'If it ends here · ';
+    return {txt:`${fin}<b>${lo.nm}</b> eliminated · ${wi.nm} advance`,cls:'crit'};
+  }
+  const gk=m.group,g=DG[gk];if(!g)return null;
+  if(!g.teams.some(t=>t.abbr===m.home.ab)||!g.teams.some(t=>t.abbr===m.away.ab))return null;
+  const R=hs>as?'H':as>hs?'A':'D';
+  // finished games are already baked into the live standings; in-progress ones are not, so simulate
+  const cls=(m.state==='post')?CLS[gk]:classify(simGroupResult(gk,m.home.ab,m.away.ab,R),gk);
+  if(!cls)return null;
+  const by={};cls.forEach(r=>by[r.team.abbr]=r);
+  const hR=by[m.home.ab],aR=by[m.away.ab];if(!hR||!aR)return null;
+  const lead=m.state==='post'?'Result · ':'If it ends here · ';
+  if(R==='D'){
+    const worst=verdictCls(hR.level)==='crit'||verdictCls(aR.level)==='crit'?'crit':(verdictCls(hR.level)==='warn'||verdictCls(aR.level)==='warn')?'warn':'neutral';
+    return {txt:`${m.state==='post'?'Drawn · ':'If it stays level · '}<b>${m.home.nm}</b> ${teamVerdictText(hR)} · <b>${m.away.nm}</b> ${teamVerdictText(aR)}`,cls:worst};
+  }
+  const lo=R==='H'?m.away:m.home,wi=R==='H'?m.home:m.away,loR=by[lo.ab],wiR=by[wi.ab];
+  const winNote=wiR.level==='THROUGH'?` · ${wi.nm} through`:'';
+  return {txt:`${lead}<b>${lo.nm}</b> ${teamVerdictText(loR)}${winNote}`,cls:verdictCls(loR.level)};
 }
 
 let rootDateIdx=-1, rootDates=[];
