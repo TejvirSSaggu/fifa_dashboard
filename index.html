@@ -860,7 +860,7 @@ function renderSummary(){
   document.getElementById('summary').innerHTML=
    `<div class="stat red clickable" data-scroll="sec-board"><div class="n">${danger}</div><div class="k">Must-not-lose</div></div>
     <div class="stat green clickable" data-scroll="sec-grid"><div class="n">${thru}</div><div class="k">Through</div></div>
-    <div class="stat"><div class="n" style="color:var(--out)">${out}</div><div class="k">Knocked out</div></div>
+    <div class="stat clickable" data-scroll="sec-grid"><div class="n" style="color:var(--out)">${out}</div><div class="k">Knocked out</div></div>
     <div class="stat gold clickable" data-scroll="sec-grid"><div class="n">${settled}</div><div class="k">Groups settled</div></div>
     <div class="stat blue clickable" data-scroll="sec-grid"><div class="n">${rem}</div><div class="k">Games remaining</div></div>`;
   document.querySelectorAll('#summary .stat[data-scroll]').forEach(s=>s.onclick=()=>{
