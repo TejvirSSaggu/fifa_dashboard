@@ -136,6 +136,25 @@
   .logged-h{font-family:var(--font-data);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);padding:14px 18px 4px;border-top:1px solid var(--line)}
 
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:16px}
+  /* best third-placed race */
+  .thirds{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .th-row{display:grid;grid-template-columns:38px minmax(0,1fr) 40px 48px 44px 96px;gap:10px;align-items:center;padding:10px 16px;border-bottom:1px solid rgba(50,98,149,.07);font-size:13px}
+  .th-row.head{font-family:var(--font-data);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);padding:9px 16px 7px}
+  .th-row.head span:nth-child(n+3){text-align:right}
+  .th-row .th-rk{font-family:var(--font-data);font-weight:700;color:var(--mid)}
+  .th-row .th-tm{display:flex;align-items:center;gap:9px;min-width:0}
+  .th-row .th-gp{font-family:var(--font-display);font-weight:800;color:var(--flood)}
+  .th-row .th-abbr{font-family:var(--font-data);font-weight:700;font-size:12px;color:var(--mid)}
+  .th-row .th-full{color:var(--hi);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .th-row .th-n{text-align:right;font-variant-numeric:tabular-nums;color:var(--mid)}
+  .th-row .th-pts{text-align:right;font-family:var(--font-data);font-weight:700;color:var(--hi)}
+  .th-row.in{background:rgba(0,154,68,.05)} .th-row.in .th-full{color:#00713E}
+  .th-row.out{opacity:.62}
+  .th-tag{justify-self:end;font-family:var(--font-data);font-size:9.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:3px 9px;border-radius:999px}
+  .th-tag.in{background:rgba(0,154,68,.12);color:#00713E} .th-tag.out{background:rgba(160,174,192,.18);color:#5A6678}
+  .th-cut{display:flex;align-items:center;gap:10px;padding:6px 16px;background:rgba(228,0,43,.05);font-family:var(--font-data);font-size:9.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#CC0028}
+  .th-cut::before,.th-cut::after{content:'';flex:1;height:1px;background:rgba(228,0,43,.25)}
+  .thirds-empty{padding:22px 16px;text-align:center;color:var(--dim);font-size:13px}
   .card{background:linear-gradient(180deg,#FFFFFF,#F7F8FC);border:1px solid var(--line);border-radius:14px;overflow:hidden;transition:.2s}
   .card:hover{border-color:var(--line-strong)}
   .card.settled{order:5;opacity:.92}
@@ -415,6 +434,11 @@
   </div>
   <div class="grid" id="grid"></div>
 
+  <!-- 06 BEST THIRDS -->
+  <div class="sec-head" id="sec-thirds"><span class="sec-num">06</span><h2>Best Third-Placed Race</h2>
+    <span class="sub">the 8 best of the 12 third-placed teams also reach the Round of 32 · live snapshot, the cut can still move</span></div>
+  <div class="thirds" id="thirds"></div>
+
   <div class="method">
     <h3>How it works</h3>
     <b>Live refresh:</b> the button pulls current standings and the remaining schedule straight from ESPN's public World Cup feed, then rebuilds everything. It also runs automatically each time you open the file, so opening it once a day keeps it current. If the network is blocked (some in-app previews sandbox external requests), it falls back to the last saved data and you can still log results by hand.
@@ -479,6 +503,9 @@ function koFromDate(dt){const p=localParts(dt);return p.hour+':'+p.minute+' '+p.
 function todayIsoET(){return isoFromDate(new Date());}
 function todayLocalIso(){return isoFromDate(new Date());}
 
+// ESPN competitor.score is usually a string ("2") but can be an object {value}.
+function scoreOf(x){const v=x&&x.score;return v==null?0:(typeof v==='object'?+v.value||0:+v||0);}
+
 function buildFromLive(st,sb){
   const groups={}, teamGroup={};
   (st.children||[]).forEach(ch=>{
@@ -488,21 +515,25 @@ function buildFromLive(st,sb){
       const s={}; (e.stats||[]).forEach(x=>s[x.name]=x.value);
       const abbr=e.team.abbreviation; teamGroup[abbr]=key;
       return {abbr,name:e.team.displayName||e.team.shortDisplayName||abbr,
-        pts:+s.points||0,w:+s.wins||0,d:+s.ties||0,l:+s.losses||0,gp:+s.gamesPlayed||0};
+        pts:+s.points||0,w:+s.wins||0,d:+s.ties||0,l:+s.losses||0,gp:+s.gamesPlayed||0,
+        gf:+s.pointsFor||0,ga:+s.pointsAgainst||0};
     });
-    if(key&&teams.length) groups[key]={teams,fix:[]};
+    if(key&&teams.length) groups[key]={teams,fix:[],h2h:[]};
   });
   if(!Object.keys(groups).length) throw new Error('no groups in standings');
   (sb.events||[]).forEach(ev=>{
     const c=ev.competitions&&ev.competitions[0]; if(!c) return;
     const state=ev.status&&ev.status.type&&ev.status.type.state;
-    if(state!=='pre') return;                         // only not-yet-played
     const home=c.competitors.find(x=>x.homeAway==='home'), away=c.competitors.find(x=>x.homeAway==='away');
     if(!home||!away) return;
     const ha=home.team.abbreviation, aa=away.team.abbreviation;
     const key=teamGroup[ha]||teamGroup[aa]; if(!key||!groups[key]) return;
-    const dt=new Date(ev.date);
-    groups[key].fix.push({h:ha,a:aa,date:isoFromDate(dt),ko:koFromDate(dt),iso:ev.date,md:0});
+    if(state==='pre'){                                // not-yet-played → upcoming fixture
+      const dt=new Date(ev.date);
+      groups[key].fix.push({h:ha,a:aa,date:isoFromDate(dt),ko:koFromDate(dt),iso:ev.date,md:0});
+    }else if(state==='post'){                         // finished → keep the score for head-to-head
+      groups[key].h2h.push({h:ha,a:aa,hs:scoreOf(home),as:scoreOf(away)});
+    }
   });
   // sort fixtures, derive matchday number per team
   Object.keys(groups).forEach(k=>{
@@ -651,7 +682,8 @@ function derive(key){
       tm[f.h].gp++;tm[f.a].gp++; played.push({...f,id,r});
     } else fix.push({...f,id});
   });
-  return {teams,fix,played};
+  // h2h = real finished-match scores (predictions carry no score, so they can't add to it)
+  return {teams,fix,played,h2h:(base.h2h||[])};
 }
 
 /* ===== engine ===== */
@@ -664,6 +696,55 @@ function rankInfo(p,a){let ab=0,eq=0;const my=p[a];for(const k in p){if(k===a)co
 function canTop2(g,a,c){let ok=false;enumerate(g,c||{},res=>{if(ok)return;if(rankInfo(pointsAfter(g,res),a).ab<=1)ok=true;});return ok;}
 function lockedTop2(g,a){let L=true;enumerate(g,{},res=>{if(!L)return;const r=rankInfo(pointsAfter(g,res),a);if(r.ab+r.eq>1)L=false;});return L;}
 function teamNext(g,a){const m=g.fix.map((f,i)=>({f,i})).filter(o=>o.f.h===a||o.f.a===a).sort((x,y)=>x.f.date<y.f.date?-1:x.f.date>y.f.date?1:0);return m[0]||null;}
+
+/* ===== FIFA group-stage ranking (2026 rules) =====
+   Order: 1) points  2) goal difference  3) goals scored
+          4-6) head-to-head among teams still level (pts, GD, GF in matches between them)
+          7) fair play (no card data in feed → not applied)  8) drawing of lots (→ stable name fallback)
+   Uses real played goals; manual what-if predictions add points but no goals, so they
+   can only be separated through criterion 1. */
+function gdOf(t){return (t.gf||0)-(t.ga||0);}
+function ordinal(n){return n+(['th','st','nd','rd'][(n%100>10&&n%100<14)?0:(n%10<4?n%10:0)]||'th');}
+// mini head-to-head table restricted to matches played *between* the tied teams
+function h2hTable(g,set){
+  const inSet={},m={}; set.forEach(a=>{inSet[a]=1;m[a]={pts:0,gd:0,gf:0};});
+  (g.h2h||[]).forEach(x=>{
+    if(!inSet[x.h]||!inSet[x.a])return;
+    m[x.h].gf+=x.hs; m[x.a].gf+=x.as; m[x.h].gd+=x.hs-x.as; m[x.a].gd+=x.as-x.hs;
+    if(x.hs>x.as)m[x.h].pts+=3; else if(x.as>x.hs)m[x.a].pts+=3; else {m[x.h].pts++;m[x.a].pts++;}
+  });
+  return m;
+}
+// full FIFA ordering of a group's teams → array of abbreviations, best to worst
+function fifaOrder(g){
+  const teams=[...g.teams].sort((a,b)=>b.pts-a.pts||gdOf(b)-gdOf(a)||(b.gf||0)-(a.gf||0));
+  const out=[];let i=0;
+  while(i<teams.length){
+    let j=i+1;
+    while(j<teams.length&&teams[j].pts===teams[i].pts&&gdOf(teams[j])===gdOf(teams[i])&&(teams[j].gf||0)===(teams[i].gf||0))j++;
+    const tied=teams.slice(i,j);
+    if(tied.length>1){
+      const h=h2hTable(g,tied.map(t=>t.abbr));
+      tied.sort((a,b)=>h[b.abbr].pts-h[a.abbr].pts||h[b.abbr].gd-h[a.abbr].gd||h[b.abbr].gf-h[a.abbr].gf||a.name.localeCompare(b.name));
+    }
+    tied.forEach(t=>out.push(t.abbr)); i=j;
+  }
+  return out;
+}
+function fifaPos(g,a){return fifaOrder(g).indexOf(a)+1;}
+/* Best third-placed race: rank the twelve 3rd-placed teams across groups.
+   FIFA order for thirds: points → GD → goals scored → fair play → lots. Top 8 advance.
+   This is a live snapshot ("if the stage ended now"); the cut can still move while games remain. */
+function bestThirds(){
+  const thirds=groupKeysSorted().map(k=>{
+    const g=DG[k],ord=fifaOrder(g); if(ord.length<3)return null;
+    const t=g.teams.find(x=>x.abbr===ord[2]);
+    return {group:k,abbr:t.abbr,name:t.name,pts:t.pts,gd:gdOf(t),gf:(t.gf||0)};
+  }).filter(Boolean);
+  thirds.sort((a,b)=>b.pts-a.pts||b.gd-a.gd||b.gf-a.gf||a.name.localeCompare(b.name));
+  thirds.forEach((t,i)=>{t.rank=i+1;t.in=i<8;});
+  return thirds;
+}
 
 const DAY=86400000;
 function daysUntil(s){
@@ -678,8 +759,11 @@ function classify(g,key){
   return g.teams.map(t=>{
     const a=t.abbr,nx=teamNext(g,a),gl=g.fix.filter(f=>f.h===a||f.a===a).length;
     const res={team:t,group:key,next:nx,gamesLeft:gl};
-    if(!nx){const top2=canTop2(g,a,{});res.level=top2?'THROUGH':'OUT';res.crit=top2?0:-1;
-      res.reason=top2?'Finished in the top two.':'Eliminated in the group stage.';return res;}
+    if(!nx){const pos=fifaPos(g,a);res.pos=pos;
+      if(pos<=2){res.level='THROUGH';res.crit=0;res.reason='Finished '+ordinal(pos)+' — through to the knockouts.';}
+      else if(pos===3){res.level='THIRD';res.crit=20;res.reason='Finished 3rd — qualification rides on the best-third race.';}
+      else {res.level='OUT';res.crit=-1;res.reason='Finished '+ordinal(pos)+' — eliminated in the group stage.';}
+      return res;}
     const opp=nx.f.h===a?nx.f.a:nx.f.h;res.opp=opp;const ot=g.teams.find(x=>x.abbr===opp);res.oppName=ot?ot.name:opp;
     const cL={};cL[nx.i]=(nx.f.h===a?'A':'H');const cD={};cD[nx.i]='D';
     const after=gl-1,ceil=t.pts+3*after;
@@ -699,8 +783,24 @@ function classify(g,key){
   });
 }
 
-let DG={},CLS={},ALL=[];
-function recompute(){DG={};CLS={};ALL=[];Object.keys(STATE.groups).forEach(k=>{DG[k]=derive(k);CLS[k]=classify(DG[k],k);CLS[k].forEach(r=>ALL.push(r));});}
+let DG={},CLS={},ALL=[],THIRDS=[],STAGE_COMPLETE=false;
+function recompute(){
+  DG={};CLS={};ALL=[];
+  Object.keys(STATE.groups).forEach(k=>{DG[k]=derive(k);CLS[k]=classify(DG[k],k);CLS[k].forEach(r=>ALL.push(r));});
+  // best-third race across all groups
+  THIRDS=bestThirds();
+  STAGE_COMPLETE=groupKeysSorted().length>0 && groupKeysSorted().every(k=>DG[k].fix.length===0);
+  const byAbbr={};ALL.forEach(r=>byAbbr[r.team.abbr]=r);
+  THIRDS.forEach(t=>{
+    const r=byAbbr[t.abbr];if(!r)return;
+    r.thirdRank=t.rank;r.thirdIn=t.in;
+    if(STAGE_COMPLETE){               // race is decided → finalise the 3rd-placed verdicts
+      r.level=t.in?'THROUGH':'OUT';r.crit=t.in?0:-1;
+      r.reason=t.in?('Best-third spot — ranked #'+t.rank+' of 12 thirds (top 8 advance).')
+                   :('Finished 3rd but ranked #'+t.rank+' of 12 thirds — missed the top-8 cut.');
+    }
+  });
+}
 
 /* ===== tournament phase detection ===== */
 const PHASES=[
@@ -907,11 +1007,12 @@ function renderGrid(){
   const grid=document.getElementById('grid');
   grid.innerHTML=groupKeysSorted().map(key=>{
     const g=DG[key],cls=CLS[key],by={};cls.forEach(r=>by[r.team.abbr]=r);
-    const sorted=[...g.teams].sort((a,b)=>b.pts-a.pts||b.w-a.w||a.name.localeCompare(b.name));
+    const sorted=fifaOrder(g).map(ab=>g.teams.find(t=>t.abbr===ab));
     const settled=cls.every(r=>r.level==='THROUGH'||r.level==='OUT');
     const through=sorted.filter(t=>by[t.abbr].level==='THROUGH').map(t=>t.abbr);
     let rows='';
-    sorted.forEach((t,idx)=>{const r=by[t.abbr];if(gHideElim&&r.level==='OUT')return;const [pc,pl]=PILL[r.level],nx=r.next;
+    sorted.forEach((t,idx)=>{const r=by[t.abbr];if(gHideElim&&r.level==='OUT')return;let [pc,pl]=PILL[r.level];const nx=r.next;
+      if(r.level==='THIRD'&&r.thirdRank){pl=`3RD · ${r.thirdIn?'IN':'OUT'} (#${r.thirdRank})`;}
       const nextTxt=nx?`${fmtDate(nx.f.date).replace(/^[A-Z]+ /,'')} <span class="x">vs ${r.opp}</span>`:'group complete';
       const klass=`trow ${idx<2?'q':''} ${idx===1?'cut':''} ${r.level==='OUT'?'elim':''}`;
       rows+=`<div class="${klass}">
@@ -929,6 +1030,25 @@ function renderGrid(){
       <div class="ctable"><div class="thead"><span>Team</span><span>Pts</span><span>Status</span></div>${rows}</div></div>`;
   }).join('');
   [...grid.children].forEach(c=>{c.style.display=c.dataset.show==='true'?'':'none';});
+}
+function renderThirds(){
+  const el=document.getElementById('thirds');if(!el)return;
+  if(!THIRDS.length){el.innerHTML='<div class="thirds-empty">Third-placed standings appear once every group has a clear third — refresh for live data.</div>';return;}
+  const verb=STAGE_COMPLETE?'qualified':'would qualify';
+  const head=`<div class="th-row head"><span>#</span><span>Team</span><span>Grp</span><span>Pts</span><span>GD</span><span>Status</span></div>`;
+  let html=head;
+  THIRDS.forEach((t,i)=>{
+    if(i===8)html+=`<div class="th-cut">Top-8 cut line · ${STAGE_COMPLETE?'these 8 advance':'8 of 12 advance'}</div>`;
+    const tag=t.in?`<span class="th-tag in">${STAGE_COMPLETE?'Through':'In'}</span>`:`<span class="th-tag out">${STAGE_COMPLETE?'Out':'Below'}</span>`;
+    html+=`<div class="th-row ${t.in?'in':'out'}" title="Group ${t.group} third — ${t.pts} pts, ${t.gd>=0?'+':''}${t.gd} GD, ${t.gf} GF · ${verb}">
+      <span class="th-rk">${t.rank}</span>
+      <span class="th-tm"><span class="th-abbr">${t.abbr}</span><span class="th-full">${t.name}</span></span>
+      <span class="th-gp">${t.group}</span>
+      <span class="th-pts">${t.pts}</span>
+      <span class="th-n">${t.gd>=0?'+':''}${t.gd}</span>
+      ${tag}</div>`;
+  });
+  el.innerHTML=html;
 }
 function fmtDur(ms){if(ms<0)ms=0;const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60;
   if(h>0)return h+'h '+String(m).padStart(2,'0')+'m'; if(m>0)return m+'m '+String(ss).padStart(2,'0')+'s'; return ss+'s';}
@@ -1339,7 +1459,7 @@ function renderRootingByGroup(el){
   el.innerHTML=cards.map(renderRootCard).join('');
 }
 
-function renderAll(){recompute();renderPhase();renderLiveBanner();renderSummary();renderToday();try{renderRooting();}catch(e){console.error('renderRooting error:',e);document.getElementById('rootingList').innerHTML='<div class="root-empty">Analysis error — try refreshing.</div>';}renderBoard();renderUpdate();renderGrid();}
+function renderAll(){recompute();renderPhase();renderLiveBanner();renderSummary();renderToday();try{renderRooting();}catch(e){console.error('renderRooting error:',e);document.getElementById('rootingList').innerHTML='<div class="root-empty">Analysis error — try refreshing.</div>';}renderBoard();renderUpdate();renderGrid();renderThirds();}
 
 /* ===== controls ===== */
 document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-filter]').forEach(x=>x.setAttribute('aria-pressed','false'));b.setAttribute('aria-pressed','true');boardFilter=b.dataset.filter;renderBoard();});
