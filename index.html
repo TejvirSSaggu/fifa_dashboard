@@ -451,7 +451,7 @@
       <h1><span id="phaseTitle">Group Stage</span><br><span class="thin" id="phaseSub">Survival Board</span></h1>
       <div class="refresh-row">
         <button class="rbtn" id="refreshBtn"><span class="ic">↻</span> Refresh live data</button>
-        <button class="chip jump" onclick="activateTab('thirds')">↓ Best 3rd-place race</button>
+        <button class="chip jump" onclick="activateTab('thirds',true)">↓ Best 3rd-place race</button>
         <span class="lstat" id="liveStatus"><span class="led"></span><span class="msg">Loading…</span></span>
       </div>
     </div>
@@ -1240,7 +1240,7 @@ function renderSummary(){
     'sec-korounds':'knockout','sec-kowatch':'knockout','sec-final':'knockout'};
   document.querySelectorAll('#summary .stat[data-scroll]').forEach(s=>s.onclick=()=>{
     const tab=scrollToTab[s.dataset.scroll];
-    if(tab) window.activateTab(tab);
+    if(tab) window.activateTab(tab,true);
   });
 }
 function groupSummaryHTML(){
@@ -1993,15 +1993,18 @@ refresh();
 
 (function initTabs(){
   const KEY='wc26.tab', valid=['today','needs','mustnotlose','standings','thirds','projbracket','knockout','how'];
-  window.activateTab=function(id){
+  window.activateTab=function(id,scroll){
     if(valid.indexOf(id)<0) id='today';
     valid.forEach(t=>{
       const p=document.getElementById('tab-'+t); if(p) p.classList.toggle('active', t===id);
     });
     document.querySelectorAll('#tabbar .tab').forEach(b=>b.setAttribute('aria-selected', String(b.dataset.tab===id)));
     try{localStorage.setItem(KEY,id);}catch(e){}
+    // on user-initiated switches, bring the tab bar (and the panel below it) into view —
+    // the header above the bar is tall, so a silent switch can leave content below the fold
+    if(scroll){const bar=document.getElementById('tabbar'); if(bar) bar.scrollIntoView({behavior:'smooth',block:'start'});}
   };
-  document.querySelectorAll('#tabbar .tab').forEach(b=>b.addEventListener('click',()=>window.activateTab(b.dataset.tab)));
+  document.querySelectorAll('#tabbar .tab').forEach(b=>b.addEventListener('click',()=>window.activateTab(b.dataset.tab,true)));
   let start='today'; try{const s=localStorage.getItem(KEY); if(s&&valid.indexOf(s)>=0) start=s;}catch(e){}
   window.activateTab(start);
 })();
