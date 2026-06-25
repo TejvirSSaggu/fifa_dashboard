@@ -107,3 +107,14 @@ test('resolveSlot: loser feeder is shown as a label, never resolved', () => {
   assert.equal(out.kind, 'feeder');
   assert.match(out.label, /SF #1 loser/);
 });
+
+test('projectedRound: rolls forward one stage at a time', () => {
+  const { projectedRound } = pure;
+  const done = (o = {}) => Object.assign({ R32: false, R16: false, QF: false, SF: false }, o);
+  assert.equal(projectedRound({ stageComplete: false, done: done() }), 'R32');
+  assert.equal(projectedRound({ stageComplete: true,  done: done() }), 'R16');
+  assert.equal(projectedRound({ stageComplete: true,  done: done({ R32: true }) }), 'QF');
+  assert.equal(projectedRound({ stageComplete: true,  done: done({ R32: true, R16: true }) }), 'SF');
+  assert.equal(projectedRound({ stageComplete: true,  done: done({ R32: true, R16: true, QF: true }) }), 'FINAL');
+  assert.equal(projectedRound({ stageComplete: true,  done: done({ R32: true, R16: true, QF: true, SF: true }) }), null);
+});

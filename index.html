@@ -799,6 +799,14 @@ function resolveSlot(slot, ctx, depth){
   }
   return {kind:'feeder', label:slot.label||'TBD'};
 }
+function projectedRound(state){
+  if(!state.stageComplete) return 'R32';
+  if(!state.done.R32) return 'R16';
+  if(!state.done.R16) return 'QF';
+  if(!state.done.QF)  return 'SF';
+  if(!state.done.SF)  return 'FINAL';
+  return null;
+}
 // </bracket-pure>
 
 async function refresh(quiet){
