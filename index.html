@@ -742,7 +742,7 @@ function buildKnockout(sb){
     const home=c.competitors.find(x=>x.homeAway==='home'), away=c.competitors.find(x=>x.homeAway==='away');
     if(!home||!away) return null;
     const s=ev.status||{}, t=s.type||{}, dt=new Date(ev.date);
-    const mk=x=>({ab:x.team.abbreviation||'?',nm:x.team.displayName||x.team.shortDisplayName||x.team.abbreviation||'TBD',sc:scoreOf(x),win:!!x.winner});
+    const mk=x=>({ab:x.team.abbreviation||'?',nm:x.team.displayName||x.team.shortDisplayName||x.team.abbreviation||'TBD',sc:scoreOf(x),win:!!x.winner,slot:parseSlot(x.team)});
     const venue=(c.venue&&c.venue.fullName)||(ev.venue&&ev.venue.fullName)||'';
     return {round:code, date:localIsoFromDate(dt), kickoffMs:dt.getTime(), ko:koFromDate(dt), venue,
       state:t.state||'pre', decided:t.state==='post', home:mk(home), away:mk(away)};
@@ -808,6 +808,41 @@ function projectedRound(state){
   return null;
 }
 // </bracket-pure>
+function projGroupPos(rank, group){
+  const g=DG[group]; if(!g||!g.teams) return null;
+  const ord=fifaOrder(g); const ab=ord[rank-1]; if(!ab) return null;
+  const t=g.teams.find(x=>x.abbr===ab); if(!t) return null;
+  return {ab:t.abbr, nm:t.name};
+}
+function makeThirdHint(){
+  const used=new Set();   // greedy, so the same team isn't hinted into multiple slots
+  return (eligible)=>{
+    const cands=(THIRDS||[]).filter(t=>t.in && eligible.indexOf(t.group)>=0 && !used.has(t.abbr))
+                            .sort((a,b)=>a.rank-b.rank);
+    if(!cands.length) return null;
+    used.add(cands[0].abbr);
+    return {ab:cands[0].abbr, nm:cands[0].name, group:cands[0].group};
+  };
+}
+function buildProjectedBracket(){
+  const matches=STATE.knockout||[];
+  const round=projectedRound({stageComplete:STAGE_COMPLETE, done:{
+    R32:koRoundDone('R32'), R16:koRoundDone('R16'), QF:koRoundDone('QF'), SF:koRoundDone('SF')}});
+  if(!round) return {round:null, ties:[]};
+  const index=numberRounds(matches);
+  const ctx={
+    groupPos:projGroupPos,
+    thirdHint:makeThirdHint(),
+    feederMatch:(r,n)=>index[r+'#'+n]||null,
+  };
+  const ties=matches.filter(m=>m.round===round)
+    .sort((a,b)=>a.kickoffMs-b.kickoffMs)
+    .map(m=>({when:koWhen(m), venue:m.venue||'',
+      home:resolveSlot(m.home.slot, ctx, 0),
+      away:resolveSlot(m.away.slot, ctx, 0)}));
+  return {round, ties};
+}
+window.__bracket={buildProjectedBracket};
 
 async function refresh(quiet){
   const btn=document.getElementById('refreshBtn');
