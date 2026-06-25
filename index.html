@@ -1252,7 +1252,7 @@ function renderSummary(){
 }
 function groupSummaryHTML(){
   const danger=ALL.filter(r=>DANGER.includes(r.level)).length, out=ALL.filter(r=>r.level==='OUT').length, thru=ALL.filter(r=>r.level==='THROUGH').length;
-  const settled=groupKeysSorted().filter(k=>CLS[k].every(r=>r.level==='THROUGH'||r.level==='OUT')).length;
+  const settled=groupKeysSorted().filter(k=>DG[k].fix.length===0).length;   // settled = all fixtures played
   const rem=groupKeysSorted().reduce((n,k)=>n+DG[k].fix.length,0);
   document.getElementById('critCount').textContent=danger;
   return `<div class="stat red clickable" data-scroll="sec-board"><div class="n">${danger}</div><div class="k">Must-not-lose</div></div>
@@ -1317,7 +1317,7 @@ function renderGrid(){
   grid.innerHTML=groupKeysSorted().map(key=>{
     const g=DG[key],cls=CLS[key],by={};cls.forEach(r=>by[r.team.abbr]=r);
     const sorted=fifaOrder(g).map(ab=>g.teams.find(t=>t.abbr===ab));
-    const settled=cls.every(r=>r.level==='THROUGH'||r.level==='OUT');
+    const settled=g.fix.length===0;   // settled = all fixtures played (matches the summary metric)
     const through=sorted.filter(t=>by[t.abbr].level==='THROUGH').map(t=>t.abbr);
     let rows='';
     sorted.forEach((t,idx)=>{const r=by[t.abbr];if(gHideElim&&r.level==='OUT')return;if(gThroughOnly&&r.level!=='THROUGH')return;let [pc,pl]=PILL[r.level];const nx=r.next;
