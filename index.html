@@ -157,6 +157,20 @@
   .th-cut{display:flex;align-items:center;gap:10px;padding:6px 16px;background:rgba(228,0,43,.05);font-family:var(--font-data);font-size:9.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#CC0028}
   .th-cut::before,.th-cut::after{content:'';flex:1;height:1px;background:rgba(228,0,43,.25)}
   .thirds-empty{padding:22px 16px;text-align:center;color:var(--dim);font-size:13px}
+  .pb-wrap{display:flex;flex-direction:column;gap:12px}
+  .pb-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .pb-badge{font:700 11px/1 system-ui;letter-spacing:.08em;color:#fff;background:var(--warn,#D4850A);padding:4px 8px;border-radius:999px}
+  .pb-cap{color:var(--dim,#718096);font-size:12px}
+  .pb-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+  .pb-card{background:var(--surface,#fff);border:1px solid var(--line,#e2e8f0);border-radius:12px;padding:12px}
+  .pb-when{font-size:11px;color:var(--dim,#718096);margin-bottom:8px}
+  .pb-slot{display:flex;align-items:baseline;gap:8px;padding:4px 0}
+  .pb-ab{font-weight:800;min-width:42px}
+  .pb-nm{font-size:13px}
+  .pb-proj{font-size:10px;color:var(--dim,#718096);font-weight:600}
+  .pb-tbd,.pb-third,.pb-pair{font-size:12px;color:var(--dim,#718096)}
+  .pb-hint{display:block;font-size:11px;color:var(--warn,#D4850A);margin-top:2px}
+  .pb-empty{padding:22px 16px;text-align:center;color:var(--dim,#718096);font-size:13px}
   /* knockout watch board */
   .kwatch{display:flex;flex-direction:column;gap:8px}
   .kw-row{display:grid;grid-template-columns:128px minmax(0,1fr) 66px minmax(0,168px);gap:14px;align-items:center;background:var(--slat);border:1px solid var(--line);border-left:3px solid var(--flood);border-radius:11px;padding:13px 16px}
@@ -418,6 +432,14 @@
     .fx{grid-template-columns:1fr;gap:7px}.res{justify-content:flex-start}
   }
   @media (prefers-reduced-motion:reduce){.board-row,.rbtn.spin .ic{animation:none}}
+
+  .tabs{position:sticky;top:0;z-index:20;display:flex;gap:4px;overflow-x:auto;background:var(--bg,#0b0f14);
+    border-bottom:1px solid var(--line,#e2e8f0);padding:8px 4px;margin:8px 0 14px}
+  .tab{flex:0 0 auto;border:1px solid var(--line,#e2e8f0);background:transparent;color:var(--dim,#718096);
+    font:600 13px/1 system-ui;padding:8px 12px;border-radius:999px;cursor:pointer;white-space:nowrap}
+  .tab[aria-selected="true"]{background:var(--accent,#E4002B);color:#fff;border-color:transparent}
+  .tabpanel{display:none}
+  .tabpanel.active{display:block}
 </style>
 </head>
 <body>
@@ -429,7 +451,7 @@
       <h1><span id="phaseTitle">Group Stage</span><br><span class="thin" id="phaseSub">Survival Board</span></h1>
       <div class="refresh-row">
         <button class="rbtn" id="refreshBtn"><span class="ic">↻</span> Refresh live data</button>
-        <button class="chip jump" onclick="document.getElementById('sec-thirds').scrollIntoView({behavior:'smooth',block:'start'})">↓ Best 3rd-place race</button>
+        <button class="chip jump" onclick="activateTab('thirds',true)">↓ Best 3rd-place race</button>
         <span class="lstat" id="liveStatus"><span class="led"></span><span class="msg">Loading…</span></span>
       </div>
     </div>
@@ -442,11 +464,25 @@
   <div id="liveBanner"></div>
   <div class="summary" id="summary"></div>
 
+  <nav class="tabs" id="tabbar" role="tablist">
+    <button class="tab" role="tab" data-tab="today">Today</button>
+    <button class="tab" role="tab" data-tab="needs">Who Needs What</button>
+    <button class="tab" role="tab" data-tab="mustnotlose">Must-Not-Lose</button>
+    <button class="tab" role="tab" data-tab="standings">Standings</button>
+    <button class="tab" role="tab" data-tab="thirds">Best Thirds</button>
+    <button class="tab" role="tab" data-tab="projbracket">Projected Bracket</button>
+    <button class="tab" role="tab" data-tab="knockout">Knockout</button>
+    <button class="tab" role="tab" data-tab="how">How it works</button>
+  </nav>
+
+  <div class="tabpanel" id="tab-today">
   <!-- 01 TODAY -->
   <div class="sec-head"><span class="sec-num">01</span><h2>Today's Matches</h2>
     <span class="sub">listed in kickoff order · scores and match clock update live</span></div>
   <div class="tl" id="todayList"></div>
+  </div>
 
+  <div class="tabpanel" id="tab-needs">
   <!-- 02 ROOTING GUIDE -->
   <div class="sec-head"><span class="sec-num">02</span><h2>Who Needs What</h2>
     <span class="sub">which teams need which result to advance — browse by day or group</span></div>
@@ -465,7 +501,9 @@
     <button class="chip" id="rootGrpNext">Next group ▸</button>
   </div>
   <div class="rooting" id="rootingList"></div>
+  </div>
 
+  <div class="tabpanel" id="tab-mustnotlose">
   <!-- 03 BOARD -->
   <div class="sec-head" id="sec-board"><span class="sec-num">03</span><h2>Must-Not-Lose Watch</h2>
     <span class="sub">a loss in this match ends the team's top-two hopes — eliminated teams drop off automatically</span></div>
@@ -488,7 +526,9 @@
     <span class="li"><span class="dot" style="background:var(--through)"></span> Through</span>
     <span class="li"><span class="dot" style="background:var(--out)"></span> Out</span>
   </div>
+  </div>
 
+  <div class="tabpanel" id="tab-standings">
   <!-- 04 UPDATE -->
   <div class="sec-head"><span class="sec-num">04</span><h2>Predict / Log Results</h2>
     <span class="sub">live data fills the table automatically — use this to log a result manually or test "what-if" outcomes</span></div>
@@ -511,12 +551,23 @@
     <button class="chip warn" data-gtoggle="through" aria-pressed="false">Through teams only</button>
   </div>
   <div class="grid" id="grid"></div>
+  </div>
 
+  <div class="tabpanel" id="tab-thirds">
   <!-- 06 BEST THIRDS -->
   <div class="sec-head" id="sec-thirds"><span class="sec-num">06</span><h2>Best Third-Placed Race</h2>
     <span class="sub">the 8 best of the 12 third-placed teams also reach the Round of 32 · live snapshot, the cut can still move</span></div>
   <div class="thirds" id="thirds"></div>
+  </div>
 
+  <div class="tabpanel" id="tab-projbracket">
+  <!-- PROJECTED BRACKET -->
+  <div class="sec-head" id="sec-projbracket"><span class="sec-num">★</span><h2>Projected Bracket</h2>
+    <span class="sub">who'd meet whom in the next round — from current standings; winners are not predicted</span></div>
+  <div id="projbracket"></div>
+  </div>
+
+  <div class="tabpanel" id="tab-knockout">
   <!-- 07 KNOCKOUT WATCH -->
   <div class="sec-head" id="sec-kowatch" style="display:none"><span class="sec-num">07</span><h2>Knockout Watch</h2>
     <span class="sub">live and upcoming ties — single elimination, win or go home</span></div>
@@ -531,7 +582,9 @@
   <div class="sec-head" id="sec-final" style="display:none"><span class="sec-num">09</span><h2>The Final · Road to Glory</h2>
     <span class="sub">from 48 nations to two — every step the finalists took to get here</span></div>
   <div id="final" style="display:none"></div>
+  </div>
 
+  <div class="tabpanel" id="tab-how">
   <div class="method">
     <h3>How it works</h3>
     <b>Live refresh:</b> the button pulls current standings and the remaining schedule straight from ESPN's public World Cup feed, then rebuilds everything. It also runs automatically each time you open the file, so opening it once a day keeps it current. If the network is blocked (some in-app previews sandbox external requests), it falls back to the last saved data and you can still log results by hand.
@@ -539,6 +592,7 @@
     For each team it simulates <b>every remaining result in its group</b> and asks of its next match: <i>if this team loses, can it still reach the top two?</i> —
     <b style="color:#E4002B">Must win</b> (a draw also eliminates) · <b style="color:#CC0028">Must not lose</b> (a draw survives) · <b style="color:#D4850A">On the brink</b> (top-two gone on a loss, best-third still open) · <b style="color:#8B6200">Stakes</b> · <b style="color:#00713E">Through</b> · <b style="color:#718096">Out</b>. A team is retired once it can't reach the top two and its points ceiling is ≤3; a group settles once every team is through or out.
     <p class="cap">Models a top-two finish; 8 of 12 third-placed teams also advance, so a red flag means top-two danger, not certain elimination, except where the points ceiling is already ≤3. Data: ESPN public API (unofficial) — for personal use; if it ever changes shape the refresh may fail and you can fall back to manual logging. Live refresh works best when you download the file and open it in your browser. Times shown in your local timezone.</p>
+  </div>
   </div>
 
   <footer>LIVE REFRESH VIA ESPN PUBLIC FEED · NOT AFFILIATED WITH FIFA OR ESPN · BUILT JUN 2026</footer>
@@ -742,12 +796,109 @@ function buildKnockout(sb){
     const home=c.competitors.find(x=>x.homeAway==='home'), away=c.competitors.find(x=>x.homeAway==='away');
     if(!home||!away) return null;
     const s=ev.status||{}, t=s.type||{}, dt=new Date(ev.date);
-    const mk=x=>({ab:x.team.abbreviation||'?',nm:x.team.displayName||x.team.shortDisplayName||x.team.abbreviation||'TBD',sc:scoreOf(x),win:!!x.winner});
+    const mk=x=>({ab:x.team.abbreviation||'?',nm:x.team.displayName||x.team.shortDisplayName||x.team.abbreviation||'TBD',sc:scoreOf(x),win:!!x.winner,slot:parseSlot(x.team)});
     const venue=(c.venue&&c.venue.fullName)||(ev.venue&&ev.venue.fullName)||'';
     return {round:code, date:localIsoFromDate(dt), kickoffMs:dt.getTime(), ko:koFromDate(dt), venue,
       state:t.state||'pre', decided:t.state==='post', home:mk(home), away:mk(away)};
   }).filter(Boolean).sort((a,b)=>a.kickoffMs-b.kickoffMs);
 }
+
+// <bracket-pure>
+// — pure bracket logic; no DOM, no module globals (test/extract.mjs depends on these markers)
+function parseSlot(team){
+  const ab=((team&&team.abbreviation)||'').trim();
+  const dn=((team&&team.displayName)||'').trim();
+  let m;
+  if(m=/^([12])([A-L])$/.exec(ab)) return {kind:'pos', rank:+m[1], group:m[2]};
+  if(/^Third Place Group/i.test(dn)){
+    const eligible=(dn.replace(/^Third Place Group\s*/i,'').match(/[A-L]/g))||[];
+    return {kind:'third', eligible};
+  }
+  if(m=/^(Round of 32|Round of 16|Quarterfinal|Semifinal)\s+(\d+)\s+(Winner|Loser)$/i.exec(dn)){
+    const RND={'round of 32':'R32','round of 16':'R16','quarterfinal':'QF','semifinal':'SF'};
+    return {kind:'feeder', feederRound:RND[m[1].toLowerCase()], feederNum:+m[2], result:m[3].toLowerCase()};
+  }
+  return {kind:'team', ab, nm:dn||ab};
+}
+function numberRounds(matches){
+  const byRound={};
+  (matches||[]).forEach(m=>{ (byRound[m.round]=byRound[m.round]||[]).push(m); });
+  const index={};
+  Object.keys(byRound).forEach(r=>{
+    byRound[r].slice().sort((a,b)=>a.kickoffMs-b.kickoffMs).forEach((m,i)=>{ index[r+'#'+(i+1)]=m; });
+  });
+  return index;
+}
+function resolveSlot(slot, ctx, depth){
+  depth=depth||0;
+  if(slot.kind==='team') return {kind:'team', ab:slot.ab, nm:slot.nm};
+  if(slot.kind==='pos'){
+    const note=(slot.rank===1?'1st':'2nd')+' · Group '+slot.group;
+    const t=ctx.groupPos(slot.rank, slot.group);
+    return t ? {kind:'team', ab:t.ab, nm:t.nm, projected:true, note}
+             : {kind:'pos', label:note};
+  }
+  if(slot.kind==='third'){
+    return {kind:'third', eligible:slot.eligible.slice(), hint:ctx.thirdHint(slot.eligible)||null};
+  }
+  if(slot.kind==='feeder'){
+    if(depth>=1 || slot.result==='loser')
+      return {kind:'feeder', label:slot.feederRound+' #'+slot.feederNum+' '+(slot.result||'winner')};
+    const fm=ctx.feederMatch(slot.feederRound, slot.feederNum);
+    if(!fm||!fm.home||!fm.away)
+      return {kind:'feeder', label:slot.feederRound+' #'+slot.feederNum+' winner'};
+    return {kind:'pair',
+      a:resolveSlot(fm.home.slot, ctx, depth+1),
+      b:resolveSlot(fm.away.slot, ctx, depth+1)};
+  }
+  return {kind:'feeder', label:slot.label||'TBD'};
+}
+function projectedRound(state){
+  if(!state.stageComplete) return 'R32';
+  if(!state.done.R32) return 'R16';
+  if(!state.done.R16) return 'QF';
+  if(!state.done.QF)  return 'SF';
+  if(!state.done.SF)  return 'FINAL';
+  return null;
+}
+// </bracket-pure>
+function projGroupPos(rank, group){
+  const g=DG[group]; if(!g||!g.teams) return null;
+  const ord=fifaOrder(g); const ab=ord[rank-1]; if(!ab) return null;
+  const t=g.teams.find(x=>x.abbr===ab); if(!t) return null;
+  return {ab:t.abbr, nm:t.name};
+}
+function makeThirdHint(){
+  const used=new Set();   // greedy, so the same team isn't hinted into multiple slots
+  return (eligible)=>{
+    const cands=(THIRDS||[]).filter(t=>t.in && eligible.indexOf(t.group)>=0 && !used.has(t.abbr))
+                            .sort((a,b)=>a.rank-b.rank);
+    if(!cands.length) return null;
+    used.add(cands[0].abbr);
+    return {ab:cands[0].abbr, nm:cands[0].name, group:cands[0].group};
+  };
+}
+// NOTE: feeder linkage maps "Round of 32 N Winner" to the Nth R32 match by kickoff order.
+// Only affects projections beyond R32; verify against ESPN once R32 begins (2026-06-28+).
+function buildProjectedBracket(){
+  const matches=STATE.knockout||[];
+  const round=projectedRound({stageComplete:STAGE_COMPLETE, done:{
+    R32:koRoundDone('R32'), R16:koRoundDone('R16'), QF:koRoundDone('QF'), SF:koRoundDone('SF')}});
+  if(!round) return {round:null, ties:[]};
+  const index=numberRounds(matches);
+  const ctx={
+    groupPos:projGroupPos,
+    thirdHint:makeThirdHint(),
+    feederMatch:(r,n)=>index[r+'#'+n]||null,
+  };
+  const ties=matches.filter(m=>m.round===round)
+    .sort((a,b)=>a.kickoffMs-b.kickoffMs)
+    .map(m=>({when:koWhen(m), venue:m.venue||'',
+      home:resolveSlot(m.home.slot, ctx, 0),
+      away:resolveSlot(m.away.slot, ctx, 0)}));
+  return {round, ties};
+}
+window.__bracket={buildProjectedBracket};
 
 async function refresh(quiet){
   const btn=document.getElementById('refreshBtn');
@@ -1085,9 +1236,11 @@ function renderLiveBanner(){
 
 function renderSummary(){
   document.getElementById('summary').innerHTML = STAGE_COMPLETE ? knockoutSummaryHTML() : groupSummaryHTML();
+  const scrollToTab={'sec-board':'mustnotlose','sec-grid':'standings','sec-thirds':'thirds',
+    'sec-korounds':'knockout','sec-kowatch':'knockout','sec-final':'knockout'};
   document.querySelectorAll('#summary .stat[data-scroll]').forEach(s=>s.onclick=()=>{
-    const t=document.getElementById(s.dataset.scroll);
-    if(t)t.scrollIntoView({behavior:'smooth',block:'start'});
+    const tab=scrollToTab[s.dataset.scroll];
+    if(tab) window.activateTab(tab,true);
   });
 }
 function groupSummaryHTML(){
@@ -1267,6 +1420,33 @@ function renderKnockoutRounds(){
       <div class="ko-cards">${ms.map(koCardRich).join('')}</div></div>`;
   });
   el.innerHTML=html||'<div class="board-empty">Round of 32 begins once the group stage wraps up.</div>';
+}
+
+const PROJ_LABEL={R32:'Round of 32',R16:'Round of 16',QF:'Quarter-finals',SF:'Semi-finals',FINAL:'Final'};
+function pbSlotHTML(r){
+  if(r.kind==='team') return `<span class="pb-ab">${r.ab}</span><span class="pb-nm">${r.nm}${r.projected?` <span class="pb-proj">(${r.note})</span>`:''}</span>`;
+  if(r.kind==='pos')  return `<span class="pb-tbd">${r.label}</span>`;
+  if(r.kind==='third')return `<span class="pb-third">3rd of ${r.eligible.join('/')}${r.hint?`<span class="pb-hint">likely ${r.hint.ab} — 3rd · Grp ${r.hint.group}</span>`:''}</span>`;
+  if(r.kind==='pair'){const lab=x=>x.kind==='team'?x.ab:(x.kind==='third'?('3rd '+x.eligible.join('/')):(x.label||'TBD'));
+    return `<span class="pb-pair">Winner of ${lab(r.a)} v ${lab(r.b)}</span>`;}
+  return `<span class="pb-tbd">${r.label||'TBD'}</span>`;
+}
+function renderProjectedBracket(){
+  const el=document.getElementById('projbracket'); if(!el) return;
+  const {round,ties}=buildProjectedBracket();
+  if(!round||!ties.length){
+    el.innerHTML='<div class="pb-empty">The bracket is fully resolved — see the Knockout tab for actual results.</div>';
+    return;
+  }
+  const cards=ties.map(t=>`<div class="pb-card">
+    <div class="pb-when">${t.when&&t.when.txt?t.when.txt:''}${t.venue?` · ${t.venue}`:''}</div>
+    <div class="pb-slot">${pbSlotHTML(t.home)}</div>
+    <div class="pb-slot">${pbSlotHTML(t.away)}</div></div>`).join('');
+  el.innerHTML=`<div class="pb-wrap">
+    <div class="pb-head"><span class="pb-badge">PROJECTED</span>
+      <strong>${PROJ_LABEL[round]} — who'd meet whom</strong>
+      <span class="pb-cap">assumes current standings · winners not predicted</span></div>
+    <div class="pb-cards">${cards}</div></div>`;
 }
 
 /* reconstruct a finalist's full tournament path: group stage + each knockout leg */
@@ -1789,7 +1969,7 @@ function renderRootingByGroup(el){
   el.innerHTML=cards.map(renderRootCard).join('');
 }
 
-function renderAll(){recompute();renderPhase();renderLiveBanner();renderSummary();renderToday();try{renderRooting();}catch(e){console.error('renderRooting error:',e);document.getElementById('rootingList').innerHTML='<div class="root-empty">Analysis error — try refreshing.</div>';}renderBoard();renderUpdate();renderGrid();renderThirds();renderKnockoutWatch();renderKnockoutRounds();renderFinal();}
+function renderAll(){recompute();renderPhase();renderLiveBanner();renderSummary();renderToday();try{renderRooting();}catch(e){console.error('renderRooting error:',e);document.getElementById('rootingList').innerHTML='<div class="root-empty">Analysis error — try refreshing.</div>';}renderBoard();renderUpdate();renderGrid();renderThirds();renderProjectedBracket();renderKnockoutWatch();renderKnockoutRounds();renderFinal();}
 
 /* ===== controls ===== */
 document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-filter]').forEach(x=>x.setAttribute('aria-pressed','false'));b.setAttribute('aria-pressed','true');boardFilter=b.dataset.filter;renderBoard();});
@@ -1810,6 +1990,24 @@ document.getElementById('rootGrpNext').onclick=()=>{if(rootGrpIdx<groupKeysSorte
 /* ===== boot: render snapshot instantly, then auto-refresh ===== */
 renderAll();
 refresh();
+
+(function initTabs(){
+  const KEY='wc26.tab', valid=['today','needs','mustnotlose','standings','thirds','projbracket','knockout','how'];
+  window.activateTab=function(id,scroll){
+    if(valid.indexOf(id)<0) id='today';
+    valid.forEach(t=>{
+      const p=document.getElementById('tab-'+t); if(p) p.classList.toggle('active', t===id);
+    });
+    document.querySelectorAll('#tabbar .tab').forEach(b=>b.setAttribute('aria-selected', String(b.dataset.tab===id)));
+    try{localStorage.setItem(KEY,id);}catch(e){}
+    // on user-initiated switches, bring the tab bar (and the panel below it) into view —
+    // the header above the bar is tall, so a silent switch can leave content below the fold
+    if(scroll){const bar=document.getElementById('tabbar'); if(bar) bar.scrollIntoView({behavior:'smooth',block:'start'});}
+  };
+  document.querySelectorAll('#tabbar .tab').forEach(b=>b.addEventListener('click',()=>window.activateTab(b.dataset.tab,true)));
+  let start='today'; try{const s=localStorage.getItem(KEY); if(s&&valid.indexOf(s)>=0) start=s;}catch(e){}
+  window.activateTab(start);
+})();
 </script>
 <!-- Vercel Web Analytics -->
 <script>
