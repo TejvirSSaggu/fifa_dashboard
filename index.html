@@ -878,6 +878,8 @@ function makeThirdHint(){
     return {ab:cands[0].abbr, nm:cands[0].name, group:cands[0].group};
   };
 }
+// NOTE: feeder linkage maps "Round of 32 N Winner" to the Nth R32 match by kickoff order.
+// Only affects projections beyond R32; verify against ESPN once R32 begins (2026-06-28+).
 function buildProjectedBracket(){
   const matches=STATE.knockout||[];
   const round=projectedRound({stageComplete:STAGE_COMPLETE, done:{

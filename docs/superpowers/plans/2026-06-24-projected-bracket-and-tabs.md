@@ -15,7 +15,7 @@
 - Pure-logic functions (inside the `// <bracket-pure>` … `// </bracket-pure>` markers) must not reference the DOM or module-level globals — all live data enters via a `ctx` argument. This is what makes Node extraction-testing possible.
 - Third-place R32 slots render as "3rd of A/B/C/D/F" plus a "likely: …" hint — never a single forced team.
 - Reuse existing helpers verbatim: `fifaOrder(g)`, `DG[group].teams`, `THIRDS` (`{group,abbr,name,rank,in}`), `koRoundDone(code)`, `STAGE_COMPLETE`, `STATE.knockout`, `koWhen(m)`.
-- Node tests run with: `node --test test/` (requires Node ≥ 18).
+- Node tests run with: `node --test test/*.test.mjs` (Node 23; the bare-directory form with a trailing slash is broken in this version, so always pass the glob). `extract.mjs` returns only functions that exist yet (via a `typeof` guard), so tasks add functions without needing stubs.
 
 ---
 
@@ -56,8 +56,11 @@ const here = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(here, '..', 'index.html'), 'utf8');
 const m = html.match(/\/\/ <bracket-pure>([\s\S]*?)\/\/ <\/bracket-pure>/);
 if (!m) throw new Error('bracket-pure block not found in index.html');
+// `typeof X` is safe for not-yet-declared functions, so this returns each function
+// once its task adds it — no stubs needed in index.html.
+const NAMES = ['parseSlot', 'numberRounds', 'resolveSlot', 'projectedRound'];
 export const pure = new Function(
-  m[1] + '\nreturn { parseSlot, numberRounds, resolveSlot, projectedRound };'
+  m[1] + '\nreturn { ' + NAMES.map(n => `${n}: typeof ${n}==='function' ? ${n} : undefined`).join(', ') + ' };'
 )();
 ```
 
@@ -107,7 +110,7 @@ test('parseSlot: real team', () => {
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `node --test test/`
+Run: `node --test test/*.test.mjs`
 Expected: FAIL — `Error: bracket-pure block not found in index.html` (the block doesn't exist yet).
 
 - [ ] **Step 4: Add the pure block with `parseSlot`**
@@ -136,7 +139,7 @@ function parseSlot(team){
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `node --test test/`
+Run: `node --test test/*.test.mjs`
 Expected: PASS — all `parseSlot` tests green.
 
 - [ ] **Step 6: Commit**
@@ -179,7 +182,7 @@ test('numberRounds: 1-based index per round by kickoff order', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --test test/`
+Run: `node --test test/*.test.mjs`
 Expected: FAIL — `numberRounds is not a function` (extractor returns `undefined` for it).
 
 - [ ] **Step 3: Add `numberRounds` to the pure block**
@@ -200,7 +203,7 @@ function numberRounds(matches){
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test test/`
+Run: `node --test test/*.test.mjs`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -297,7 +300,7 @@ test('resolveSlot: loser feeder is shown as a label, never resolved', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --test test/`
+Run: `node --test test/*.test.mjs`
 Expected: FAIL — `resolveSlot is not a function`.
 
 - [ ] **Step 3: Add `resolveSlot` to the pure block**
@@ -333,7 +336,7 @@ function resolveSlot(slot, ctx, depth){
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test test/`
+Run: `node --test test/*.test.mjs`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -374,7 +377,7 @@ test('projectedRound: rolls forward one stage at a time', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `node --test test/`
+Run: `node --test test/*.test.mjs`
 Expected: FAIL — `projectedRound is not a function`.
 
 - [ ] **Step 3: Add `projectedRound` to the pure block**
@@ -394,7 +397,7 @@ function projectedRound(state){
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test test/`
+Run: `node --test test/*.test.mjs`
 Expected: PASS — all four pure functions green.
 
 - [ ] **Step 5: Commit**
@@ -474,7 +477,7 @@ window.__bracket={buildProjectedBracket};
 
 - [ ] **Step 3: Verify pure tests still pass**
 
-Run: `node --test test/`
+Run: `node --test test/*.test.mjs`
 Expected: PASS (the wiring lives outside the marker block, so extraction is unaffected).
 
 - [ ] **Step 4: Verify the pipeline in a real browser via Playwright MCP**
@@ -718,7 +721,7 @@ git commit -m "feat: tabbed layout replacing single-scroll dashboard"
 
 - [ ] **Step 1: Run the pure unit suite**
 
-Run: `node --test test/`
+Run: `node --test test/*.test.mjs`
 Expected: PASS — all tests across Tasks 1–4 green.
 
 - [ ] **Step 2: Browser smoke test via Playwright MCP**
