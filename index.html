@@ -775,6 +775,30 @@ function numberRounds(matches){
   });
   return index;
 }
+function resolveSlot(slot, ctx, depth){
+  depth=depth||0;
+  if(slot.kind==='team') return {kind:'team', ab:slot.ab, nm:slot.nm};
+  if(slot.kind==='pos'){
+    const note=(slot.rank===1?'1st':'2nd')+' · Group '+slot.group;
+    const t=ctx.groupPos(slot.rank, slot.group);
+    return t ? {kind:'team', ab:t.ab, nm:t.nm, projected:true, note}
+             : {kind:'pos', label:note};
+  }
+  if(slot.kind==='third'){
+    return {kind:'third', eligible:slot.eligible.slice(), hint:ctx.thirdHint(slot.eligible)||null};
+  }
+  if(slot.kind==='feeder'){
+    if(depth>=1 || slot.result==='loser')
+      return {kind:'feeder', label:slot.feederRound+' #'+slot.feederNum+' '+(slot.result||'winner')};
+    const fm=ctx.feederMatch(slot.feederRound, slot.feederNum);
+    if(!fm||!fm.home||!fm.away)
+      return {kind:'feeder', label:slot.feederRound+' #'+slot.feederNum+' winner'};
+    return {kind:'pair',
+      a:resolveSlot(fm.home.slot, ctx, depth+1),
+      b:resolveSlot(fm.away.slot, ctx, depth+1)};
+  }
+  return {kind:'feeder', label:slot.label||'TBD'};
+}
 // </bracket-pure>
 
 async function refresh(quiet){
