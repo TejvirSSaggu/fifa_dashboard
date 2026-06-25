@@ -157,6 +157,20 @@
   .th-cut{display:flex;align-items:center;gap:10px;padding:6px 16px;background:rgba(228,0,43,.05);font-family:var(--font-data);font-size:9.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#CC0028}
   .th-cut::before,.th-cut::after{content:'';flex:1;height:1px;background:rgba(228,0,43,.25)}
   .thirds-empty{padding:22px 16px;text-align:center;color:var(--dim);font-size:13px}
+  .pb-wrap{display:flex;flex-direction:column;gap:12px}
+  .pb-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .pb-badge{font:700 11px/1 system-ui;letter-spacing:.08em;color:#fff;background:var(--warn,#D4850A);padding:4px 8px;border-radius:999px}
+  .pb-cap{color:var(--dim,#718096);font-size:12px}
+  .pb-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+  .pb-card{background:var(--surface,#fff);border:1px solid var(--line,#e2e8f0);border-radius:12px;padding:12px}
+  .pb-when{font-size:11px;color:var(--dim,#718096);margin-bottom:8px}
+  .pb-slot{display:flex;align-items:baseline;gap:8px;padding:4px 0}
+  .pb-ab{font-weight:800;min-width:42px}
+  .pb-nm{font-size:13px}
+  .pb-proj{font-size:10px;color:var(--dim,#718096);font-weight:600}
+  .pb-tbd,.pb-third,.pb-pair{font-size:12px;color:var(--dim,#718096)}
+  .pb-hint{display:block;font-size:11px;color:var(--warn,#D4850A);margin-top:2px}
+  .pb-empty{padding:22px 16px;text-align:center;color:var(--dim,#718096);font-size:13px}
   /* knockout watch board */
   .kwatch{display:flex;flex-direction:column;gap:8px}
   .kw-row{display:grid;grid-template-columns:128px minmax(0,1fr) 66px minmax(0,168px);gap:14px;align-items:center;background:var(--slat);border:1px solid var(--line);border-left:3px solid var(--flood);border-radius:11px;padding:13px 16px}
@@ -516,6 +530,11 @@
   <div class="sec-head" id="sec-thirds"><span class="sec-num">06</span><h2>Best Third-Placed Race</h2>
     <span class="sub">the 8 best of the 12 third-placed teams also reach the Round of 32 · live snapshot, the cut can still move</span></div>
   <div class="thirds" id="thirds"></div>
+
+  <!-- PROJECTED BRACKET -->
+  <div class="sec-head" id="sec-projbracket"><span class="sec-num">★</span><h2>Projected Bracket</h2>
+    <span class="sub">who'd meet whom in the next round — from current standings; winners are not predicted</span></div>
+  <div id="projbracket"></div>
 
   <!-- 07 KNOCKOUT WATCH -->
   <div class="sec-head" id="sec-kowatch" style="display:none"><span class="sec-num">07</span><h2>Knockout Watch</h2>
@@ -1364,6 +1383,33 @@ function renderKnockoutRounds(){
   el.innerHTML=html||'<div class="board-empty">Round of 32 begins once the group stage wraps up.</div>';
 }
 
+const PROJ_LABEL={R32:'Round of 32',R16:'Round of 16',QF:'Quarter-finals',SF:'Semi-finals',FINAL:'Final'};
+function pbSlotHTML(r){
+  if(r.kind==='team') return `<span class="pb-ab">${r.ab}</span><span class="pb-nm">${r.nm}${r.projected?` <span class="pb-proj">(${r.note})</span>`:''}</span>`;
+  if(r.kind==='pos')  return `<span class="pb-tbd">${r.label}</span>`;
+  if(r.kind==='third')return `<span class="pb-third">3rd of ${r.eligible.join('/')}${r.hint?`<span class="pb-hint">likely ${r.hint.ab} — 3rd · Grp ${r.hint.group}</span>`:''}</span>`;
+  if(r.kind==='pair'){const lab=x=>x.kind==='team'?x.ab:(x.kind==='third'?('3rd '+x.eligible.join('/')):(x.label||'TBD'));
+    return `<span class="pb-pair">Winner of ${lab(r.a)} v ${lab(r.b)}</span>`;}
+  return `<span class="pb-tbd">${r.label||'TBD'}</span>`;
+}
+function renderProjectedBracket(){
+  const el=document.getElementById('projbracket'); if(!el) return;
+  const {round,ties}=buildProjectedBracket();
+  if(!round||!ties.length){
+    el.innerHTML='<div class="pb-empty">The bracket is fully resolved — see the Knockout tab for actual results.</div>';
+    return;
+  }
+  const cards=ties.map(t=>`<div class="pb-card">
+    <div class="pb-when">${t.when&&t.when.txt?t.when.txt:''}${t.venue?` · ${t.venue}`:''}</div>
+    <div class="pb-slot">${pbSlotHTML(t.home)}</div>
+    <div class="pb-slot">${pbSlotHTML(t.away)}</div></div>`).join('');
+  el.innerHTML=`<div class="pb-wrap">
+    <div class="pb-head"><span class="pb-badge">PROJECTED</span>
+      <strong>${PROJ_LABEL[round]} — who'd meet whom</strong>
+      <span class="pb-cap">assumes current standings · winners not predicted</span></div>
+    <div class="pb-cards">${cards}</div></div>`;
+}
+
 /* reconstruct a finalist's full tournament path: group stage + each knockout leg */
 function teamJourney(ab){
   const gr=ALL.find(r=>r.team.abbr===ab);
@@ -1884,7 +1930,7 @@ function renderRootingByGroup(el){
   el.innerHTML=cards.map(renderRootCard).join('');
 }
 
-function renderAll(){recompute();renderPhase();renderLiveBanner();renderSummary();renderToday();try{renderRooting();}catch(e){console.error('renderRooting error:',e);document.getElementById('rootingList').innerHTML='<div class="root-empty">Analysis error — try refreshing.</div>';}renderBoard();renderUpdate();renderGrid();renderThirds();renderKnockoutWatch();renderKnockoutRounds();renderFinal();}
+function renderAll(){recompute();renderPhase();renderLiveBanner();renderSummary();renderToday();try{renderRooting();}catch(e){console.error('renderRooting error:',e);document.getElementById('rootingList').innerHTML='<div class="root-empty">Analysis error — try refreshing.</div>';}renderBoard();renderUpdate();renderGrid();renderThirds();renderProjectedBracket();renderKnockoutWatch();renderKnockoutRounds();renderFinal();}
 
 /* ===== controls ===== */
 document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-filter]').forEach(x=>x.setAttribute('aria-pressed','false'));b.setAttribute('aria-pressed','true');boardFilter=b.dataset.filter;renderBoard();});
