@@ -35,3 +35,16 @@ test('parseSlot: real team', () => {
   assert.deepEqual(parseSlot({ abbreviation: 'BRA', displayName: 'Brazil' }),
     { kind: 'team', ab: 'BRA', nm: 'Brazil' });
 });
+
+test('numberRounds: 1-based index per round by kickoff order', () => {
+  const { numberRounds } = pure;
+  const ms = [
+    { round: 'R32', kickoffMs: 300 }, { round: 'R32', kickoffMs: 100 },
+    { round: 'R32', kickoffMs: 200 }, { round: 'R16', kickoffMs: 999 },
+  ];
+  const idx = numberRounds(ms);
+  assert.equal(idx['R32#1'].kickoffMs, 100);
+  assert.equal(idx['R32#2'].kickoffMs, 200);
+  assert.equal(idx['R32#3'].kickoffMs, 300);
+  assert.equal(idx['R16#1'].kickoffMs, 999);
+});

@@ -766,6 +766,15 @@ function parseSlot(team){
   }
   return {kind:'team', ab, nm:dn||ab};
 }
+function numberRounds(matches){
+  const byRound={};
+  (matches||[]).forEach(m=>{ (byRound[m.round]=byRound[m.round]||[]).push(m); });
+  const index={};
+  Object.keys(byRound).forEach(r=>{
+    byRound[r].slice().sort((a,b)=>a.kickoffMs-b.kickoffMs).forEach((m,i)=>{ index[r+'#'+(i+1)]=m; });
+  });
+  return index;
+}
 // </bracket-pure>
 
 async function refresh(quiet){
