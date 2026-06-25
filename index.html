@@ -235,7 +235,7 @@
   @media(max-width:560px){.final-paths,.final-stats{grid-template-columns:1fr;gap:14px}}
   .card{background:linear-gradient(180deg,#FFFFFF,#F7F8FC);border:1px solid var(--line);border-radius:14px;overflow:hidden;transition:.2s}
   .card:hover{border-color:var(--line-strong)}
-  .card.settled{order:5;opacity:.92}
+  .card.settled{opacity:.92}   /* keep settled groups in alphabetical position, don't sink them */
   .card.settled .card-h{background:linear-gradient(90deg,rgba(0,154,68,.08),transparent)}
   .card-h{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid var(--line);background:linear-gradient(90deg,rgba(50,98,149,.05),transparent)}
   .card-h .g{font-family:var(--font-display);font-weight:800;font-size:21px;text-transform:uppercase;letter-spacing:.04em;display:flex;align-items:center;gap:9px}
