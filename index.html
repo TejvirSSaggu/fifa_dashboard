@@ -1123,6 +1123,13 @@ let boardFilter='all',boardSort='crit',gHideSettled=false,gHideElim=false,gThrou
 
 function groupKeysSorted(){return Object.keys(STATE.groups).sort();}
 
+// Once a match ends, keep its Full-Time card in the live banner only briefly, then hide it.
+// ESPN's model has no final-whistle timestamp, so anchor to kickoff + a typical match duration.
+const FT_ESTIMATE_MIN=115;   // typical wall-clock kickoff → final whistle
+const FT_GRACE_MIN=15;       // how long the Full-Time card lingers after that
+function withinFinishedGrace(kickoffMs, nowMs){
+  return nowMs - kickoffMs < (FT_ESTIMATE_MIN + FT_GRACE_MIN) * 60000;
+}
 function renderLiveBanner(){
   const el=document.getElementById('liveBanner');
   // find live matches from STATE.today or STATE.allMatches
@@ -1145,7 +1152,7 @@ function renderLiveBanner(){
         if(m.state==='post' && (!recent || m.kickoffMs>recent.kickoffMs)) recent=m;
       });
     });
-    if(recent){ liveMatches=[recent]; isFinished=true; }
+    if(recent && withinFinishedGrace(recent.kickoffMs, Date.now())){ liveMatches=[recent]; isFinished=true; }
   }
 
   if(!liveMatches.length){ el.innerHTML=''; return; }
