@@ -432,6 +432,14 @@
     .fx{grid-template-columns:1fr;gap:7px}.res{justify-content:flex-start}
   }
   @media (prefers-reduced-motion:reduce){.board-row,.rbtn.spin .ic{animation:none}}
+
+  .tabs{position:sticky;top:0;z-index:20;display:flex;gap:4px;overflow-x:auto;background:var(--bg,#0b0f14);
+    border-bottom:1px solid var(--line,#e2e8f0);padding:8px 4px;margin:8px 0 14px}
+  .tab{flex:0 0 auto;border:1px solid var(--line,#e2e8f0);background:transparent;color:var(--dim,#718096);
+    font:600 13px/1 system-ui;padding:8px 12px;border-radius:999px;cursor:pointer;white-space:nowrap}
+  .tab[aria-selected="true"]{background:var(--accent,#E4002B);color:#fff;border-color:transparent}
+  .tabpanel{display:none}
+  .tabpanel.active{display:block}
 </style>
 </head>
 <body>
@@ -443,7 +451,7 @@
       <h1><span id="phaseTitle">Group Stage</span><br><span class="thin" id="phaseSub">Survival Board</span></h1>
       <div class="refresh-row">
         <button class="rbtn" id="refreshBtn"><span class="ic">↻</span> Refresh live data</button>
-        <button class="chip jump" onclick="document.getElementById('sec-thirds').scrollIntoView({behavior:'smooth',block:'start'})">↓ Best 3rd-place race</button>
+        <button class="chip jump" onclick="activateTab('thirds')">↓ Best 3rd-place race</button>
         <span class="lstat" id="liveStatus"><span class="led"></span><span class="msg">Loading…</span></span>
       </div>
     </div>
@@ -456,11 +464,25 @@
   <div id="liveBanner"></div>
   <div class="summary" id="summary"></div>
 
+  <nav class="tabs" id="tabbar" role="tablist">
+    <button class="tab" role="tab" data-tab="today">Today</button>
+    <button class="tab" role="tab" data-tab="needs">Who Needs What</button>
+    <button class="tab" role="tab" data-tab="mustnotlose">Must-Not-Lose</button>
+    <button class="tab" role="tab" data-tab="standings">Standings</button>
+    <button class="tab" role="tab" data-tab="thirds">Best Thirds</button>
+    <button class="tab" role="tab" data-tab="projbracket">Projected Bracket</button>
+    <button class="tab" role="tab" data-tab="knockout">Knockout</button>
+    <button class="tab" role="tab" data-tab="how">How it works</button>
+  </nav>
+
+  <div class="tabpanel" id="tab-today">
   <!-- 01 TODAY -->
   <div class="sec-head"><span class="sec-num">01</span><h2>Today's Matches</h2>
     <span class="sub">listed in kickoff order · scores and match clock update live</span></div>
   <div class="tl" id="todayList"></div>
+  </div>
 
+  <div class="tabpanel" id="tab-needs">
   <!-- 02 ROOTING GUIDE -->
   <div class="sec-head"><span class="sec-num">02</span><h2>Who Needs What</h2>
     <span class="sub">which teams need which result to advance — browse by day or group</span></div>
@@ -479,7 +501,9 @@
     <button class="chip" id="rootGrpNext">Next group ▸</button>
   </div>
   <div class="rooting" id="rootingList"></div>
+  </div>
 
+  <div class="tabpanel" id="tab-mustnotlose">
   <!-- 03 BOARD -->
   <div class="sec-head" id="sec-board"><span class="sec-num">03</span><h2>Must-Not-Lose Watch</h2>
     <span class="sub">a loss in this match ends the team's top-two hopes — eliminated teams drop off automatically</span></div>
@@ -502,7 +526,9 @@
     <span class="li"><span class="dot" style="background:var(--through)"></span> Through</span>
     <span class="li"><span class="dot" style="background:var(--out)"></span> Out</span>
   </div>
+  </div>
 
+  <div class="tabpanel" id="tab-standings">
   <!-- 04 UPDATE -->
   <div class="sec-head"><span class="sec-num">04</span><h2>Predict / Log Results</h2>
     <span class="sub">live data fills the table automatically — use this to log a result manually or test "what-if" outcomes</span></div>
@@ -525,17 +551,23 @@
     <button class="chip warn" data-gtoggle="through" aria-pressed="false">Through teams only</button>
   </div>
   <div class="grid" id="grid"></div>
+  </div>
 
+  <div class="tabpanel" id="tab-thirds">
   <!-- 06 BEST THIRDS -->
   <div class="sec-head" id="sec-thirds"><span class="sec-num">06</span><h2>Best Third-Placed Race</h2>
     <span class="sub">the 8 best of the 12 third-placed teams also reach the Round of 32 · live snapshot, the cut can still move</span></div>
   <div class="thirds" id="thirds"></div>
+  </div>
 
+  <div class="tabpanel" id="tab-projbracket">
   <!-- PROJECTED BRACKET -->
   <div class="sec-head" id="sec-projbracket"><span class="sec-num">★</span><h2>Projected Bracket</h2>
     <span class="sub">who'd meet whom in the next round — from current standings; winners are not predicted</span></div>
   <div id="projbracket"></div>
+  </div>
 
+  <div class="tabpanel" id="tab-knockout">
   <!-- 07 KNOCKOUT WATCH -->
   <div class="sec-head" id="sec-kowatch" style="display:none"><span class="sec-num">07</span><h2>Knockout Watch</h2>
     <span class="sub">live and upcoming ties — single elimination, win or go home</span></div>
@@ -550,7 +582,9 @@
   <div class="sec-head" id="sec-final" style="display:none"><span class="sec-num">09</span><h2>The Final · Road to Glory</h2>
     <span class="sub">from 48 nations to two — every step the finalists took to get here</span></div>
   <div id="final" style="display:none"></div>
+  </div>
 
+  <div class="tabpanel" id="tab-how">
   <div class="method">
     <h3>How it works</h3>
     <b>Live refresh:</b> the button pulls current standings and the remaining schedule straight from ESPN's public World Cup feed, then rebuilds everything. It also runs automatically each time you open the file, so opening it once a day keeps it current. If the network is blocked (some in-app previews sandbox external requests), it falls back to the last saved data and you can still log results by hand.
@@ -558,6 +592,7 @@
     For each team it simulates <b>every remaining result in its group</b> and asks of its next match: <i>if this team loses, can it still reach the top two?</i> —
     <b style="color:#E4002B">Must win</b> (a draw also eliminates) · <b style="color:#CC0028">Must not lose</b> (a draw survives) · <b style="color:#D4850A">On the brink</b> (top-two gone on a loss, best-third still open) · <b style="color:#8B6200">Stakes</b> · <b style="color:#00713E">Through</b> · <b style="color:#718096">Out</b>. A team is retired once it can't reach the top two and its points ceiling is ≤3; a group settles once every team is through or out.
     <p class="cap">Models a top-two finish; 8 of 12 third-placed teams also advance, so a red flag means top-two danger, not certain elimination, except where the points ceiling is already ≤3. Data: ESPN public API (unofficial) — for personal use; if it ever changes shape the refresh may fail and you can fall back to manual logging. Live refresh works best when you download the file and open it in your browser. Times shown in your local timezone.</p>
+  </div>
   </div>
 
   <footer>LIVE REFRESH VIA ESPN PUBLIC FEED · NOT AFFILIATED WITH FIFA OR ESPN · BUILT JUN 2026</footer>
@@ -1199,9 +1234,11 @@ function renderLiveBanner(){
 
 function renderSummary(){
   document.getElementById('summary').innerHTML = STAGE_COMPLETE ? knockoutSummaryHTML() : groupSummaryHTML();
+  const scrollToTab={'sec-board':'mustnotlose','sec-grid':'standings','sec-thirds':'thirds',
+    'sec-korounds':'knockout','sec-kowatch':'knockout','sec-final':'knockout'};
   document.querySelectorAll('#summary .stat[data-scroll]').forEach(s=>s.onclick=()=>{
-    const t=document.getElementById(s.dataset.scroll);
-    if(t)t.scrollIntoView({behavior:'smooth',block:'start'});
+    const tab=scrollToTab[s.dataset.scroll];
+    if(tab) window.activateTab(tab);
   });
 }
 function groupSummaryHTML(){
@@ -1951,6 +1988,21 @@ document.getElementById('rootGrpNext').onclick=()=>{if(rootGrpIdx<groupKeysSorte
 /* ===== boot: render snapshot instantly, then auto-refresh ===== */
 renderAll();
 refresh();
+
+(function initTabs(){
+  const KEY='wc26.tab', valid=['today','needs','mustnotlose','standings','thirds','projbracket','knockout','how'];
+  window.activateTab=function(id){
+    if(valid.indexOf(id)<0) id='today';
+    valid.forEach(t=>{
+      const p=document.getElementById('tab-'+t); if(p) p.classList.toggle('active', t===id);
+    });
+    document.querySelectorAll('#tabbar .tab').forEach(b=>b.setAttribute('aria-selected', String(b.dataset.tab===id)));
+    try{localStorage.setItem(KEY,id);}catch(e){}
+  };
+  document.querySelectorAll('#tabbar .tab').forEach(b=>b.addEventListener('click',()=>window.activateTab(b.dataset.tab)));
+  let start='today'; try{const s=localStorage.getItem(KEY); if(s&&valid.indexOf(s)>=0) start=s;}catch(e){}
+  window.activateTab(start);
+})();
 </script>
 <!-- Vercel Web Analytics -->
 <script>
