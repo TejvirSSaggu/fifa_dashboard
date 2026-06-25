@@ -749,6 +749,28 @@ function buildKnockout(sb){
   }).filter(Boolean).sort((a,b)=>a.kickoffMs-b.kickoffMs);
 }
 
+// <bracket-pure>
+// — pure bracket logic; no DOM, no module globals (test/extract.mjs depends on these markers)
+function parseSlot(team){
+  const ab=((team&&team.abbreviation)||'').trim();
+  const dn=((team&&team.displayName)||'').trim();
+  let m;
+  if(m=/^([12])([A-L])$/.exec(ab)) return {kind:'pos', rank:+m[1], group:m[2]};
+  if(/^Third Place Group/i.test(dn)){
+    const eligible=(dn.replace(/^Third Place Group\s*/i,'').match(/[A-L]/g))||[];
+    return {kind:'third', eligible};
+  }
+  if(m=/^(Round of 32|Round of 16|Quarterfinal|Semifinal)\s+(\d+)\s+(Winner|Loser)$/i.exec(dn)){
+    const RND={'round of 32':'R32','round of 16':'R16','quarterfinal':'QF','semifinal':'SF'};
+    return {kind:'feeder', feederRound:RND[m[1].toLowerCase()], feederNum:+m[2], result:m[3].toLowerCase()};
+  }
+  return {kind:'team', ab, nm:dn||ab};
+}
+function numberRounds(){ /* stub */ }
+function resolveSlot(){ /* stub */ }
+function projectedRound(){ /* stub */ }
+// </bracket-pure>
+
 async function refresh(quiet){
   const btn=document.getElementById('refreshBtn');
   if(!quiet){btn.disabled=true; btn.classList.add('spin');}
