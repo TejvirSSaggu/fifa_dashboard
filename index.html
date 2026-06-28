@@ -1701,6 +1701,7 @@ function renderBracketBoard(){
   board.innerHTML=`<svg class="bracket-lines" width="${boardW}" height="${boardH}">${paths}</svg>`+nodes.map(brkBoxHTML).join('');
   const pr=document.getElementById('brkProgress');
   if(pr) pr.textContent=model.champion?`🏆 ${model.champion.nm} — your champion`:`${model.counts.predicted} predicted · ${model.counts.remaining} ties open`;
+  if(window._brkBg){ window._brkBg.setNodes(nodes); window._brkBg.notifyChampion(model.champion?model.champion.ab:null); }
   return {boardW,boardH,model};
 }
 // custom pan/zoom on the stage; transforms the viewport, reports changes
@@ -1740,6 +1741,8 @@ function wireBracketControls(){
   $('brkFit').onclick=()=>{ if(brkPZ&&brkDims) brkPZ.fit(brkDims.boardW,brkDims.boardH); };
   $('brkClear').onclick=()=>{ if(!Object.keys(brkPicks()).length) return;
     if(confirm('Clear all your bracket predictions?')){ saveBrkPicks({}); renderBracketBoard(); } };
+  window.addEventListener('resize',()=>{ if(window._brkBg){ window._brkBg.resize(); if(brkPZ) window._brkBg.onTransform(...Object.values(brkPZ.getTransform())); } });
+  document.addEventListener('visibilitychange',()=>{ if(!window._brkBg) return; if(document.hidden) window._brkBg.stop(); else if(document.getElementById('tab-projbracket').classList.contains('active')) window._brkBg.start(); });
   $('brkBoard').addEventListener('click',e=>{
     const slot=e.target.closest('.bx-slot'); if(!slot||slot.classList.contains('tbd')) return;
     const tie=slot.dataset.tie, ab=slot.dataset.ab, m=window._brkModel; if(!tie||!ab||!m) return;
@@ -1761,6 +1764,7 @@ function renderProjectedBracket(){
   if(preview) preview.style.display='none'; if(wrap) wrap.style.display='';
   if(title) title.textContent='Bracket Predictor';
   if(sub) sub.textContent='tap a team to send them through — predict the path to the title';
+  if(!window._brkBg) window._brkBg=createBracketBg(document.getElementById('brkBg'),document.getElementById('brkStage'));
   const res=renderBracketBoard(); if(!res) return;
   brkDims={boardW:res.boardW,boardH:res.boardH};
   if(!brkPZ) brkPZ=makePanZoom(document.getElementById('brkStage'),document.getElementById('brkViewport'),onBrkTransform);
@@ -1769,7 +1773,71 @@ function renderProjectedBracket(){
 }
 // fit the board the first time the tab is opened (stage has no size while hidden)
 window.__brkShow=function(){ if(brkPZ&&brkDims&&!brkFitted){ brkPZ.fit(brkDims.boardW,brkDims.boardH);
-  if(document.getElementById('brkStage').getBoundingClientRect().width) brkFitted=true; } };
+  if(document.getElementById('brkStage').getBoundingClientRect().width) brkFitted=true; }
+  if(window._brkBg) window._brkBg.start(); };
+
+/* ===== stadium "drone descent" background (procedural) ===== */
+// Phase-2 procedural fallback: a night sky that descends into a floodlit pitch as
+// you zoom into a tie. Phase 3 layers real stadium photos over this.
+function createBracketBg(canvas, stage){
+  const ctx=canvas.getContext('2d');
+  const reduced=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const dpr=Math.min(2, window.devicePixelRatio||1);
+  let W=0,H=0,scale=1,tx=0,ty=0,nodes=[],raf=null,running=false,descent=0,frame=0;
+  let stars=[], confetti=[], lastChamp=null;
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  function resize(){ const r=stage.getBoundingClientRect(); if(!r.width) return; W=r.width; H=r.height;
+    canvas.width=W*dpr; canvas.height=H*dpr;
+    stars=Array.from({length:60},()=>({x:Math.random()*W,y:Math.random()*H*0.7,r:Math.random()*1.3+0.3,p:Math.random()*6})); }
+  function centeredNode(){ if(!nodes.length) return null; const cx=W/2,cy=H/2; let best=null,bd=1e18;
+    nodes.forEach(n=>{ const sx=(n._x+BRK.W/2)*scale+tx, sy=n._y*scale+ty; const d=(sx-cx)*(sx-cx)+(sy-cy)*(sy-cy); if(d<bd){bd=d;best=n;} }); return best; }
+  function ellipse(x,y,rx,ry){ ctx.beginPath(); ctx.ellipse(x,y,Math.max(1,rx),Math.max(1,ry),0,0,Math.PI*2); }
+  function drawStars(){ ctx.save(); stars.forEach(s=>{ const tw=reduced?0.6:(0.5+0.5*Math.sin(frame*0.03+s.p));
+    ctx.globalAlpha=0.5*tw*(1-descent); ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill(); }); ctx.restore(); }
+  function drawStadium(d){
+    const px=tx*0.015, py=ty*0.015, cx=W/2+px, cy=H*0.60+py;
+    // floodlight glows brighten with descent
+    [[W*0.16,H*0.10],[W*0.84,H*0.10]].forEach(([lx,ly])=>{ const g=ctx.createRadialGradient(lx+px,ly+py,0,lx+px,ly+py,200+220*d);
+      g.addColorStop(0,'rgba(255,248,230,'+(0.16*d)+')'); g.addColorStop(1,'rgba(255,248,230,0)'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); });
+    const pw=W*(0.34+0.40*d), ph=H*(0.20+0.26*d);
+    ctx.save(); ctx.translate(cx,cy);
+    ctx.fillStyle='rgba(14,8,14,'+(0.55*d)+')'; ellipse(0,0,pw*1.18,ph*1.22); ctx.fill();   // stands
+    ctx.fillStyle='rgba(60,70,82,'+(0.30*d)+')'; ellipse(0,0,pw*1.05,ph*1.06); ctx.fill();   // upper tier
+    ctx.fillStyle='rgba(18,110,66,'+(0.62*d)+')'; ellipse(0,0,pw,ph); ctx.fill();            // pitch
+    ctx.save(); ellipse(0,0,pw,ph); ctx.clip();                                              // mowing stripes
+    for(let i=-6;i<=6;i++){ ctx.fillStyle='rgba(255,255,255,'+(0.05*d*(i%2?1:0.4))+')'; ctx.fillRect(i*pw/6,-ph,pw/12,ph*2); }
+    ctx.strokeStyle='rgba(255,255,255,'+(0.30*d)+')'; ctx.lineWidth=1.4;
+    ctx.beginPath(); ctx.moveTo(0,-ph); ctx.lineTo(0,ph); ctx.stroke();                      // halfway line
+    ellipse(0,0,ph*0.42,ph*0.42); ctx.stroke();                                              // centre circle
+    ctx.restore();
+    ctx.restore();
+    const v=window._brkActiveVenue;
+    if(v && d>0.35){ ctx.save(); ctx.globalAlpha=clamp((d-0.35)/0.5,0,1);
+      ctx.fillStyle='rgba(255,255,255,.78)'; ctx.font='600 12px "Roboto Mono",monospace'; ctx.textAlign='center';
+      ctx.fillText('◍ '+String(v).toUpperCase(), W/2, H-16); ctx.restore(); }
+  }
+  function drawConfetti(){ if(!confetti.length) return; const cols=['#E4002B','#00B2A9','#FFB81C','#fff','#963CBD'];
+    confetti.forEach(c=>{ c.y+=c.vy; c.x+=c.vx; c.vy+=0.05; c.rot+=c.vr;
+      ctx.save(); ctx.translate(c.x,c.y); ctx.rotate(c.rot); ctx.fillStyle=cols[c.c]; ctx.fillRect(-3,-4,6,8); ctx.restore(); });
+    confetti=confetti.filter(c=>c.y<H+20); }
+  function draw(){ ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,W,H); drawStars(); if(descent>0.04) drawStadium(descent); drawConfetti(); }
+  function step(){ frame++;
+    const target=clamp((scale-0.85)/(1.9-0.85),0,1);
+    descent+= reduced ? (target-descent) : (target-descent)*0.08;
+    window._brkActiveVenue=(function(){ const n=centeredNode(); return n&&n.match?n.match.venue:null; })();
+    draw();
+    if(running && !reduced) raf=requestAnimationFrame(step); else raf=null;
+  }
+  return {
+    onTransform(s,x,y){ scale=s; tx=x; ty=y; if(reduced){ if(!W)resize(); const target=clamp((scale-0.85)/(1.9-0.85),0,1); descent=target; window._brkActiveVenue=(centeredNode()||{}).match&&centeredNode().match.venue||null; draw(); } },
+    setNodes(n){ nodes=n||[]; },
+    start(){ if(!W) resize(); if(running) return; running=true; if(!reduced){ if(raf)cancelAnimationFrame(raf); raf=requestAnimationFrame(step);} else draw(); },
+    stop(){ running=false; if(raf){cancelAnimationFrame(raf);raf=null;} },
+    resize, reduced,
+    burstConfetti(){ if(reduced) return; if(!W)resize(); for(let i=0;i<120;i++) confetti.push({x:W/2+(Math.random()-0.5)*W*0.5,y:H*0.3,vx:(Math.random()-0.5)*6,vy:Math.random()*-2,vr:(Math.random()-0.5)*0.3,rot:Math.random()*6,c:i%5}); },
+    notifyChampion(ch){ if(ch && (!lastChamp||lastChamp!==ch)){ this.burstConfetti(); } lastChamp=ch||null; }
+  };
+}
 
 /* reconstruct a finalist's full tournament path: group stage + each knockout leg */
 function teamJourney(ab){
@@ -2413,6 +2481,7 @@ refresh();
     // the header above the bar is tall, so a silent switch can leave content below the fold
     if(scroll){const bar=document.getElementById('tabbar'); if(bar) bar.scrollIntoView({behavior:'smooth',block:'start'});}
     if(id==='projbracket' && window.__brkShow) setTimeout(window.__brkShow,0);
+    else if(id!=='projbracket' && window._brkBg) window._brkBg.stop();
   };
   document.querySelectorAll('#tabbar .tab').forEach(b=>b.addEventListener('click',()=>window.activateTab(b.dataset.tab,true)));
   let start='today'; try{const s=localStorage.getItem(KEY); if(s&&valid.indexOf(s)>=0) start=s;}catch(e){}
