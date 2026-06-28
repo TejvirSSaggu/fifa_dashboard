@@ -195,6 +195,21 @@ test('buildBracketTree: picks up a full branch crown a champion', () => {
   assert.ok(finalParts.includes('H1'));
 });
 
+test('bracketModel: feeders resolve by id (official match number), not kickoff order', () => {
+  const { bracketModel } = pure;
+  const ms = koFull();
+  // Give R32 matches ids that REVERSE their kickoff order: earliest kickoff (i=0)
+  // gets the largest id, so its id-rank is last. R16 feeders reference match numbers.
+  ms.filter(m => m.round === 'R32').forEach((m, i) => { m.id = 100 + (16 - i); });
+  ['R16', 'QF', 'SF', 'FINAL'].forEach((r, ri) => ms.filter(m => m.round === r).forEach((m, i) => { m.id = 1000 + ri * 100 + i; }));
+  const model = bracketModel(ms, {});
+  const find = (n, k) => !n ? null : (n.key === k ? n : (n.kids ? (find(n.kids[0], k) || find(n.kids[1], k)) : null));
+  const r16_1 = find(model.root, 'R16#1');                 // feeds R32 match #1 and #2 (by id)
+  const kidHomes = r16_1.kids.map(k => k.match.home.ab).sort();
+  // id-rank #1 and #2 are the two LAST-kickoff R32 matches (H16, H15) — not H1/H2
+  assert.deepEqual(kidHomes, ['H15', 'H16']);
+});
+
 test('bracketModel: canonical fallback when only R32 is published', () => {
   const { bracketModel } = pure;
   const r32only = koFull().filter(m => m.round === 'R32');
