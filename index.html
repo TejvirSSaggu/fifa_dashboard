@@ -952,6 +952,12 @@ function buildBracketTree(matches, picks){
       const s=side&&side.slot;
       if(s&&s.kind==='feeder'&&s.feederRound===prev&&s.feederNum&&byKO[prev][s.feederNum-1])
         return byKO[prev][s.feederNum-1];
+      // once a match is decided, ESPN replaces its "Round of X N Winner" feeder with
+      // the real team — link to the prev-round match that team actually won
+      if(s&&s.kind==='team'&&side.ab){
+        const won=byKO[prev].find(pm=>pm.decided&&((pm.home.win&&pm.home.ab===side.ab)||(pm.away.win&&pm.away.ab===side.ab)));
+        if(won) return won;
+      }
       return null;
     };
     const hk=kid(match.home), ak=kid(match.away);
@@ -2445,18 +2451,16 @@ function renderRootingKnockout(el){
   const nextLabel=LABEL[SEQ[SEQ.indexOf(round)+1]]||'the next round';
   el.innerHTML=ties.map(m=>renderKoNeedCard(m,ko,round,nextLabel)).join('');
 }
-// who the winner of tie `m` would meet in the next round, via the feeder linkage
+// who the winner of match `m` would meet in the next round — uses the bracket tree
+// so it follows the official pairing and handles already-decided matches correctly
 function koNextOpponent(m,ko,round){
-  const SEQ=['R32','R16','QF','SF','FINAL'];
-  const next=SEQ[SEQ.indexOf(round)+1]; if(!next) return '';
-  const cur=ko.filter(x=>x.round===round).sort((a,b)=>a.kickoffMs-b.kickoffMs);
-  const n=cur.indexOf(m)+1; if(n<1) return '';
-  const tie=ko.filter(x=>x.round===next).find(x=>(x.home.slot&&x.home.slot.feederNum===n)||(x.away.slot&&x.away.slot.feederNum===n));
-  if(!tie) return '';
-  const other=(tie.home.slot&&tie.home.slot.feederNum===n)?tie.away.slot:tie.home.slot;
-  if(!other||other.feederNum==null) return '';
-  const opp=cur[other.feederNum-1]; if(!opp) return '';
-  return opp.decided ? (opp.home.win?opp.home.ab:opp.away.ab) : (opp.home.ab+' / '+opp.away.ab);
+  const tree=buildBracketTree(ko,{}); if(!tree) return '';
+  let self=null,parent=null;
+  (function walk(n,par){ if(!n||self) return; if(n.match===m){ self=n; parent=par; } if(n.kids) n.kids.forEach(k=>walk(k,n)); })(tree,null);
+  if(!parent||!parent.kids) return '';
+  const sib=parent.kids[0]===self?parent.kids[1]:parent.kids[0];
+  const sm=sib&&sib.match; if(!sm) return '';
+  return sm.decided ? (sm.home.win?sm.home.ab:sm.away.ab) : (sm.home.ab+' / '+sm.away.ab);
 }
 function renderKoNeedCard(m,ko,round,nextLabel){
   const LABEL={R32:'Round of 32',R16:'Round of 16',QF:'Quarter-finals',SF:'Semi-finals',FINAL:'Final'};
