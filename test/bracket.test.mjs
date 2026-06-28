@@ -210,6 +210,19 @@ test('bracketModel: feeders resolve by id (official match number), not kickoff o
   assert.deepEqual(kidHomes, ['H15', 'H16']);
 });
 
+test('buildBracketTree: links a resolved real-team slot back to the match it won', () => {
+  const { bracketModel } = pure;
+  const ms = koFull({ decidedR32: [1] });                    // R32#1 home (H1) wins
+  // ESPN replaces R16#1's "Round of 32 1 Winner" feeder with the real team H1
+  const r16_1 = ms.find(m => m.round === 'R16');             // first R16 feeds R32 #1 and #2
+  r16_1.home = { ab: 'H1', nm: 'Home 1', win: false, slot: { kind: 'team', ab: 'H1', nm: 'Home 1' } };
+  const model = bracketModel(ms, {});
+  const find = (n, k) => !n ? null : (n.key === k ? n : (n.kids ? (find(n.kids[0], k) || find(n.kids[1], k)) : null));
+  const node = find(model.root, 'R16#1');
+  assert.ok(node.kids, 'R16#1 keeps its children via feeder build (no canonical fallback)');
+  assert.deepEqual(node.kids.map(k => k.match.home.ab).sort(), ['H1', 'H2']);
+});
+
 test('bracketModel: canonical fallback when only R32 is published', () => {
   const { bracketModel } = pure;
   const r32only = koFull().filter(m => m.round === 'R32');
