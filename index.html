@@ -202,6 +202,7 @@
   .bx-slot:hover{background:rgba(50,98,149,.08)}
   .bx-slot.tbd{cursor:default} .bx-slot.tbd .nm{color:var(--dim);font-style:italic} .bx-slot.tbd:hover{background:transparent}
   .bx-slot.win{background:rgba(0,154,68,.12)} .bx-slot.win .nm{color:#00713E} .bx-slot.win .mk{color:var(--gold)}
+  .bx-slot.lose{cursor:default;opacity:.55} .bx-slot.lose .nm{color:var(--dim);text-decoration:line-through} .bx-slot.lose .ab{color:var(--dim)} .bx-slot.lose .fl{filter:grayscale(1)} .bx-slot.lose .mk{color:var(--dim)} .bx-slot.lose:hover{background:transparent}
   .bx-slot.predicted{background:rgba(50,98,149,.13)} .bx-slot.predicted .nm{color:var(--flood)} .bx-slot.predicted .mk{color:var(--flood)}
   .bx-tie.locked{border-color:rgba(0,154,68,.5)}
   .bx-final .bx-tie{border-color:var(--fifa-gold);box-shadow:0 0 0 2px rgba(255,184,28,.45),0 8px 26px rgba(0,0,0,.4)}
@@ -626,7 +627,7 @@
   <div class="tabpanel" id="tab-knockout">
   <!-- 07 KNOCKOUT WATCH -->
   <div class="sec-head" id="sec-kowatch" style="display:none"><span class="sec-num">07</span><h2>Knockout Watch</h2>
-    <span class="sub">live and upcoming ties — single elimination, win or go home</span></div>
+    <span class="sub">live and upcoming matches — single elimination, win or go home</span></div>
   <div class="kwatch" id="kowatch" style="display:none"></div>
 
   <!-- 08 KNOCKOUT ROUNDS -->
@@ -1550,7 +1551,7 @@ function renderKnockoutWatch(){
   // revealed ties that haven't finished, live first then soonest kickoff
   const rows=(STATE.knockout||[]).filter(m=>rev[m.round]&&m.state!=='post')
     .sort((a,b)=>(a.state==='in'?0:1)-(b.state==='in'?0:1)||a.kickoffMs-b.kickoffMs);
-  if(!rows.length){el.innerHTML='<div class="board-empty">No ties scheduled right now — see the completed rounds below.</div>';return;}
+  if(!rows.length){el.innerHTML='<div class="board-empty">No matches scheduled right now — see the completed rounds below.</div>';return;}
   el.innerHTML=rows.map(m=>{
     const w=koWhen(m),score=m.state==='pre'?'—':`${m.home.sc}–${m.away.sc}`;
     const stake=m.round==='FINAL'?'Lift the trophy':m.round==='3RD'?'Third place':'Winner → '+(KO_NEXT[m.round]||'next round');
@@ -1655,10 +1656,12 @@ function brkPlace(model){
 function brkSlotHTML(node,part){
   if(!part) return `<div class="bx-slot tbd"><span class="fl">·</span><span class="nm">TBD</span></div>`;
   const isWin=node.winner&&node.winner.ab===part.ab;
-  const locked=isWin&&node.winner.source==='locked';
+  const confirmed=node.winner&&node.winner.source==='locked';   // real result
+  const locked=isWin&&confirmed;
   const predicted=isWin&&node.winner.source==='predicted';
-  const c='bx-slot'+(isWin?' win':'')+(predicted?' predicted':'');
-  const mk=locked?'✓':(predicted?'★':'');
+  const lost=confirmed&&!isWin;                                  // eliminated in a played match
+  const c='bx-slot'+(isWin?' win':'')+(predicted?' predicted':'')+(lost?' lose':'');
+  const mk=locked?'✓':(predicted?'★':(lost?'✕':''));
   return `<div class="${c}" data-tie="${node.key}" data-ab="${part.ab}">
     <span class="fl">${flagEmoji(part.ab)}</span><span class="ab">${part.ab}</span>
     <span class="nm">${part.nm}</span><span class="mk">${mk}</span></div>`;
@@ -1701,7 +1704,7 @@ function renderBracketBoard(){
   board.style.width=boardW+'px'; board.style.height=boardH+'px';
   board.innerHTML=`<svg class="bracket-lines" width="${boardW}" height="${boardH}">${paths}</svg>`+nodes.map(brkBoxHTML).join('');
   const pr=document.getElementById('brkProgress');
-  if(pr) pr.textContent=model.champion?`🏆 ${model.champion.nm} — your champion`:`${model.counts.predicted} predicted · ${model.counts.remaining} ties open`;
+  if(pr) pr.textContent=model.champion?`🏆 ${model.champion.nm} — your champion`:`${model.counts.predicted} predicted · ${model.counts.remaining} matches open`;
   if(window._brkBg){ window._brkBg.setNodes(nodes); window._brkBg.notifyChampion(model.champion?model.champion.ab:null); }
   return {boardW,boardH,model};
 }
@@ -1832,7 +1835,19 @@ function createBracketBg(canvas, stage){
   let W=0,H=0,scale=1,tx=0,ty=0,nodes=[],raf=null,running=false,descent=0,frame=0;
   let stars=[], confetti=[], lastChamp=null;
   const imgCache={}; let curSlug=null, imgFade=0;
+  // eagle's-eye aerial pitch shown when zoomed out; crossfades into a venue as you descend
+  const overviewImg=new Image(); overviewImg.__ok=false;
+  overviewImg.onload=()=>{ overviewImg.__ok=true; if(reduced && !running) draw(); };
+  overviewImg.onerror=()=>{ overviewImg.__fail=true; };
+  overviewImg.src='stadiums/_overview.webp';
+  const overviewReady=()=>overviewImg.__ok && !overviewImg.__fail;
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  // generic cover-fit draw with subtle parallax
+  function coverDraw(im, alpha, zoom, dy){
+    const iw=im.naturalWidth, ih=im.naturalHeight; if(!iw||!ih||alpha<=0) return;
+    const s=Math.max(W/iw,H/ih)*zoom, dw=iw*s, dh=ih*s, px=tx*0.01, py=ty*0.01;
+    ctx.save(); ctx.globalAlpha=clamp(alpha,0,1); ctx.drawImage(im,(W-dw)/2+px,(H-dh)/2+py+dy,dw,dh); ctx.restore();
+  }
   // lazy-load a stadium photo the first time we descend toward its venue
   function ensureImg(slug){ if(!slug||imgCache[slug]!==undefined) return imgCache[slug];
     const im=new Image(); im.__ok=false;
@@ -1840,16 +1855,6 @@ function createBracketBg(canvas, stage){
     im.onerror=()=>{im.__ok=false;im.__fail=true;};
     im.src='stadiums/'+slug+'.webp'; imgCache[slug]=im; return im; }
   function photoReady(slug){ const im=slug&&imgCache[slug]; return im&&im.__ok&&!im.__fail; }
-  function drawPhotoCover(im,d){
-    const iw=im.naturalWidth, ih=im.naturalHeight; if(!iw||!ih) return;
-    const zoom=1+d*0.22;                                  // drone push-in with descent
-    const s=Math.max(W/iw,H/ih)*zoom, dw=iw*s, dh=ih*s;
-    const px=tx*0.01, py=ty*0.01;
-    ctx.save(); ctx.globalAlpha=clamp(d*imgFade,0,1);
-    ctx.drawImage(im,(W-dw)/2+px,(H-dh)/2+py-d*10,dw,dh);
-    const g=ctx.createLinearGradient(0,H*0.45,0,H); g.addColorStop(0,'rgba(8,5,12,0)'); g.addColorStop(1,'rgba(8,5,12,.66)');
-    ctx.fillStyle=g; ctx.fillRect(0,0,W,H); ctx.restore();
-  }
   function resize(){ const r=stage.getBoundingClientRect(); if(!r.width) return; W=r.width; H=r.height;
     canvas.width=W*dpr; canvas.height=H*dpr;
     stars=Array.from({length:60},()=>({x:Math.random()*W,y:Math.random()*H*0.7,r:Math.random()*1.3+0.3,p:Math.random()*6})); }
@@ -1860,7 +1865,10 @@ function createBracketBg(canvas, stage){
     ctx.globalAlpha=0.5*tw*(1-descent); ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill(); }); ctx.restore(); }
   function drawStadium(d){
     // real stadium photo when available, otherwise the procedural floodlit pitch
-    if(photoReady(curSlug) && imgFade>0.02){ drawPhotoCover(imgCache[curSlug],d);
+    if(photoReady(curSlug) && imgFade>0.02){
+      coverDraw(imgCache[curSlug], d*imgFade, 1+d*0.22, -d*10);
+      const gg=ctx.createLinearGradient(0,H*0.45,0,H); gg.addColorStop(0,'rgba(8,5,12,0)'); gg.addColorStop(1,'rgba(8,5,12,.66)');
+      ctx.save(); ctx.globalAlpha=clamp(d*imgFade,0,1); ctx.fillStyle=gg; ctx.fillRect(0,0,W,H); ctx.restore();
       const v=window._brkActiveVenue;
       if(v && d>0.35){ ctx.save(); ctx.globalAlpha=clamp((d-0.35)/0.5,0,1)*imgFade;
         ctx.fillStyle='rgba(255,255,255,.9)'; ctx.font='600 12px "Roboto Mono",monospace'; ctx.textAlign='center';
@@ -1892,7 +1900,13 @@ function createBracketBg(canvas, stage){
     confetti.forEach(c=>{ c.y+=c.vy; c.x+=c.vx; c.vy+=0.05; c.rot+=c.vr;
       ctx.save(); ctx.translate(c.x,c.y); ctx.rotate(c.rot); ctx.fillStyle=cols[c.c]; ctx.fillRect(-3,-4,6,8); ctx.restore(); });
     confetti=confetti.filter(c=>c.y<H+20); }
-  function draw(){ ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,W,H); drawStars(); if(descent>0.04) drawStadium(descent); drawConfetti(); }
+  function draw(){ ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,W,H);
+    if(overviewReady()){                                   // eagle's-eye pitch when zoomed out
+      coverDraw(overviewImg,(1-descent)*0.95,1+(1-descent)*0.05,0);
+      ctx.save(); ctx.fillStyle='rgba(10,6,12,'+(0.30+0.16*(1-descent))+')'; ctx.fillRect(0,0,W,H); ctx.restore();
+    } else drawStars();                                     // procedural night sky fallback
+    if(descent>0.04) drawStadium(descent);
+    drawConfetti(); }
   function syncVenue(){
     const n=centeredNode(); const venue=n&&n.match?n.match.venue:null;
     window._brkActiveVenue=venue;
@@ -2416,7 +2430,7 @@ function renderRootingKnockout(el){
   let round=SEQ.find(c=>{const ms=ko.filter(m=>m.round===c);return ms.length&&ms.some(m=>!m.decided);});
   if(!round){for(let i=SEQ.length-1;i>=0;i--){if(ko.some(m=>m.round===SEQ[i])){round=SEQ[i];break;}}}
   const ties=ko.filter(m=>m.round===round).sort((a,b)=>a.kickoffMs-b.kickoffMs);
-  if(!ties.length){ el.innerHTML='<div class="root-empty">Knockout ties appear here once the bracket is set.</div>'; return; }
+  if(!ties.length){ el.innerHTML='<div class="root-empty">Knockout matches appear here once the bracket is set.</div>'; return; }
   const nextLabel=LABEL[SEQ[SEQ.indexOf(round)+1]]||'the next round';
   el.innerHTML=ties.map(m=>renderKoNeedCard(m,ko,round,nextLabel)).join('');
 }

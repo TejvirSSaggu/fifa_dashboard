@@ -20,3 +20,6 @@ non-commercial project. Each line: file slug — source file · license · autho
 - **azteca** (Estadio Azteca) — File:Vista_aérea_del_Estadio_Azteca_-_2026_-_02.jpg · CC BY 4.0 · ProtoplasmaKid
 - **akron** (Estadio Akron) — File:Estadio_Akron_02-07-2022_cabecera_sur_lado_derecho_(3).jpg · CC0 · Alejan98
 - **bbva** (Estadio BBVA) — File:Mexico_Guadalupe_Monterrey_Estadio_BBVA_Bancomer_fifa_world_cup_2026_6.JPG · CC BY-SA 3.0 de · Arne Müseler
+
+## Overview (zoomed-out) image
+- **_overview** — File:Aerial view of the Chatham Town FC football pitch.jpg · CC BY-SA 3.0
