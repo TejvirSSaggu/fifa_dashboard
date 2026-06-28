@@ -1715,16 +1715,17 @@ function renderBracketBoard(){
 }
 // custom pan/zoom on the stage; transforms the viewport, reports changes
 function makePanZoom(stage,viewport,onChange){
-  let scale=1,tx=0,ty=0,minS=0.25,maxS=2.6;
+  let scale=1,tx=0,ty=0,minS=0.3,maxS=2.4, interacted=false;
   const pts=new Map(); let lastDist=0,lastMid=null;
   const D=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y), M=(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2});
   const clamp=s=>Math.max(minS,Math.min(maxS,s));
   function apply(){ viewport.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`; if(onChange) onChange(scale,tx,ty); }
   function zoomAt(cx,cy,f){ const ns=clamp(scale*f),k=ns/scale; tx=cx-(cx-tx)*k; ty=cy-(cy-ty)*k; scale=ns; apply(); }
-  stage.addEventListener('wheel',e=>{ e.preventDefault(); const r=stage.getBoundingClientRect();
-    zoomAt(e.clientX-r.left,e.clientY-r.top,Math.exp(-e.deltaY*0.0016)); },{passive:false});
+  stage.addEventListener('wheel',e=>{ e.preventDefault(); interacted=true; const r=stage.getBoundingClientRect();
+    const dy=Math.max(-50,Math.min(50,e.deltaY));            // clamp so one wheel notch is a gentle step
+    zoomAt(e.clientX-r.left,e.clientY-r.top,Math.exp(-dy*0.0022)); },{passive:false});
   stage.addEventListener('pointerdown',e=>{ if(e.target.closest('.bx-slot')) return; // let taps pick
-    stage.setPointerCapture(e.pointerId); pts.set(e.pointerId,{x:e.clientX,y:e.clientY}); stage.classList.add('grabbing');
+    interacted=true; stage.setPointerCapture(e.pointerId); pts.set(e.pointerId,{x:e.clientX,y:e.clientY}); stage.classList.add('grabbing');
     if(pts.size===2){ const a=[...pts.values()]; lastDist=D(a[0],a[1]); lastMid=M(a[0],a[1]); } });
   stage.addEventListener('pointermove',e=>{ if(!pts.has(e.pointerId)) return; const prev=pts.get(e.pointerId); pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
     if(pts.size===1){ tx+=e.clientX-prev.x; ty+=e.clientY-prev.y; apply(); }
@@ -1734,23 +1735,26 @@ function makePanZoom(stage,viewport,onChange){
   const up=e=>{ if(pts.has(e.pointerId)) pts.delete(e.pointerId); if(pts.size<2){lastDist=0;lastMid=null;} if(!pts.size) stage.classList.remove('grabbing'); };
   stage.addEventListener('pointerup',up); stage.addEventListener('pointercancel',up);
   return {
-    apply, getTransform:()=>({scale,tx,ty}),
-    zoomBy(f){ const r=stage.getBoundingClientRect(); zoomAt(r.width/2,r.height/2,f); },
-    fit(bw,bh){ const r=stage.getBoundingClientRect(); if(!r.width) return; const m=22;
-      scale=clamp(Math.min((r.width-2*m)/bw,(r.height-2*m)/bh)); tx=(r.width-bw*scale)/2; ty=(r.height-bh*scale)/2; apply(); }
+    apply, getTransform:()=>({scale,tx,ty}), interacted:()=>interacted, resetInteraction(){ interacted=false; },
+    zoomBy(f){ interacted=true; const r=stage.getBoundingClientRect(); zoomAt(r.width/2,r.height/2,f); },
+    fit(bw,bh){ const r=stage.getBoundingClientRect(); if(!r.width||!r.height) return false; const m=24;
+      scale=clamp(Math.min((r.width-2*m)/bw,(r.height-2*m)/bh)); tx=(r.width-bw*scale)/2; ty=(r.height-bh*scale)/2; apply(); return true; }
   };
 }
-let brkPZ=null, brkWired=false, brkFitted=false, brkDims=null;
+let brkPZ=null, brkWired=false, brkDims=null;
+// fit the board to the stage once layout is flushed; skips if the user has zoomed/panned
+function fitBracket(){ if(!brkPZ||!brkDims||brkPZ.interacted()) return;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{ if(brkPZ&&brkDims&&!brkPZ.interacted()) brkPZ.fit(brkDims.boardW,brkDims.boardH); })); }
 function onBrkTransform(scale,tx,ty){ if(window._brkBg) window._brkBg.onTransform(scale,tx,ty); }
 function wireBracketControls(){
   if(brkWired) return; brkWired=true;
   const $=id=>document.getElementById(id);
   $('brkZoomIn').onclick=()=>brkPZ&&brkPZ.zoomBy(1.3);
   $('brkZoomOut').onclick=()=>brkPZ&&brkPZ.zoomBy(1/1.3);
-  $('brkFit').onclick=()=>{ if(brkPZ&&brkDims) brkPZ.fit(brkDims.boardW,brkDims.boardH); };
+  $('brkFit').onclick=()=>{ if(brkPZ&&brkDims){ brkPZ.resetInteraction(); brkPZ.fit(brkDims.boardW,brkDims.boardH); } };
   $('brkClear').onclick=()=>{ if(!Object.keys(brkPicks()).length) return;
     if(confirm('Clear all your bracket predictions?')){ saveBrkPicks({}); renderBracketBoard(); } };
-  window.addEventListener('resize',()=>{ if(window._brkBg){ window._brkBg.resize(); if(brkPZ) window._brkBg.onTransform(...Object.values(brkPZ.getTransform())); } });
+  window.addEventListener('resize',()=>{ if(window._brkBg){ window._brkBg.resize(); fitBracket(); if(brkPZ) window._brkBg.onTransform(...Object.values(brkPZ.getTransform())); } });
   document.addEventListener('visibilitychange',()=>{ if(!window._brkBg) return; if(document.hidden) window._brkBg.stop(); else if(document.getElementById('tab-projbracket').classList.contains('active')) window._brkBg.start(); });
   $('brkBoard').addEventListener('click',e=>{
     const slot=e.target.closest('.bx-slot'); if(!slot||slot.classList.contains('tbd')) return;
@@ -1778,7 +1782,7 @@ function renderProjectedBracket(){
   brkDims={boardW:res.boardW,boardH:res.boardH};
   if(!brkPZ) brkPZ=makePanZoom(document.getElementById('brkStage'),document.getElementById('brkViewport'),onBrkTransform);
   wireBracketControls();
-  if(!brkFitted){ brkPZ.fit(res.boardW,res.boardH); if(document.getElementById('brkStage').getBoundingClientRect().width) brkFitted=true; }
+  fitBracket();
 }
 // Demo mode (?demo=bracket): synthesise a full knockout skeleton from the current
 // standings so the bracket is explorable before the real Round of 32 begins.
@@ -1801,10 +1805,8 @@ function demoKnockout(){
   ko.push({round:'FINAL',kickoffMs:Date.parse('2026-07-19T16:00:00Z'),date:'2026-07-19',ko:koFromDate(new Date(Date.parse('2026-07-19T16:00:00Z'))),venue:'MetLife Stadium',state:'pre',decided:false,home:feeder('SF',1),away:feeder('SF',2)});
   return ko;
 }
-// fit the board the first time the tab is opened (stage has no size while hidden)
-window.__brkShow=function(){ if(brkPZ&&brkDims&&!brkFitted){ brkPZ.fit(brkDims.boardW,brkDims.boardH);
-  if(document.getElementById('brkStage').getBoundingClientRect().width) brkFitted=true; }
-  if(window._brkBg) window._brkBg.start(); };
+// on tab open: fit to screen (unless the user has zoomed) and start the background
+window.__brkShow=function(){ fitBracket(); if(window._brkBg) window._brkBg.start(); };
 
 /* ===== stadium photo mapping ===== */
 // WC2026 venues -> image slug. ESPN may use the real stadium name or FIFA's
@@ -1838,7 +1840,7 @@ function createBracketBg(canvas, stage){
   const reduced=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const dpr=Math.min(2, window.devicePixelRatio||1);
   let W=0,H=0,scale=1,tx=0,ty=0,nodes=[],raf=null,running=false,descent=0,frame=0;
-  let stars=[], confetti=[], lastChamp=null;
+  let stars=[], confetti=[], lastChamp=null, dirty=true;
   const imgCache={}; let curSlug=null, imgFade=0;
   // eagle's-eye aerial pitch shown when zoomed out; crossfades into a venue as you descend
   const overviewImg=new Image(); overviewImg.__ok=false;
@@ -1922,13 +1924,17 @@ function createBracketBg(canvas, stage){
   }
   function step(){ frame++;
     const target=clamp((scale-0.85)/(1.9-0.85),0,1);
-    descent+= reduced ? (target-descent) : (target-descent)*0.08;
-    syncVenue();
-    draw();
+    const dPrev=descent, fPrev=imgFade;
+    descent+=(target-descent)*0.08;
+    syncVenue();                                              // cheap: picks the centred venue + lerps imgFade
+    // only repaint when something actually changed — keeps idle zoomed-out view smooth
+    const moving = dirty || confetti.length>0 || !overviewReady()
+      || Math.abs(descent-dPrev)>0.0008 || Math.abs(imgFade-fPrev)>0.002;
+    if(moving){ draw(); dirty=false; }
     if(running && !reduced) raf=requestAnimationFrame(step); else raf=null;
   }
   return {
-    onTransform(s,x,y){ scale=s; tx=x; ty=y; if(reduced){ if(!W)resize(); descent=clamp((scale-0.85)/(1.9-0.85),0,1); syncVenue(); draw(); } },
+    onTransform(s,x,y){ scale=s; tx=x; ty=y; dirty=true; if(reduced){ if(!W)resize(); descent=clamp((scale-0.85)/(1.9-0.85),0,1); syncVenue(); draw(); } },
     setNodes(n){ nodes=n||[]; },
     start(){ if(!W) resize(); if(running) return; running=true; if(!reduced){ if(raf)cancelAnimationFrame(raf); raf=requestAnimationFrame(step);} else draw(); },
     stop(){ running=false; if(raf){cancelAnimationFrame(raf);raf=null;} },
