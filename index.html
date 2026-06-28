@@ -377,6 +377,11 @@
   .tl-tm.lead .nm{color:#1A2138} .tl-tm.lead .sc{color:var(--through)}
   .tl-tm.dim .nm,.tl-tm.dim .ab,.tl-tm.dim .sc,.tl-tm.dim .pts{color:var(--dim)}
   .tl-foot{margin-top:11px;padding-top:10px;border-top:1px solid rgba(50,98,149,.08);font-family:var(--font-data);font-size:11.5px;color:var(--mid);line-height:1.5}
+  .goals{display:flex;flex-wrap:wrap;align-items:center;gap:5px 14px;margin-top:10px;padding-top:9px;border-top:1px solid var(--line);font-family:var(--font-data);font-size:11.5px;color:var(--mid)}
+  .goals .gl-ball{opacity:.7}
+  .goals .gl{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .goals .gl-min{font-weight:700;color:var(--hi)}
+  .goals .gl-ab{font-weight:700;font-size:9.5px;color:var(--dim);letter-spacing:.04em}
   .tl-verdict{margin-top:9px;padding:8px 11px;border-radius:9px;font-family:var(--font-data);font-size:12px;line-height:1.45;border:1px solid transparent}
   .tl-verdict b{font-weight:700}
   .tl-verdict.crit{background:rgba(228,0,43,.06);border-color:rgba(228,0,43,.2);color:#CC0028}
@@ -785,6 +790,17 @@ function stoppedNote(m){
   return 'Match canceled — not played.';
 }
 function localIsoFromDate(dt){return isoFromDate(dt);}
+// scoring plays from an ESPN competition: scorer, minute, side, and goal type
+function parseGoals(c){
+  if(!c||!c.details) return [];
+  const home=c.competitors&&c.competitors.find(x=>x.homeAway==='home'), homeId=home&&home.team&&home.team.id;
+  return c.details.filter(d=>d.scoringPlay).map(d=>{
+    const a=(d.athletesInvolved&&d.athletesInvolved[0])||{};
+    return { side:(d.team&&String(d.team.id)===String(homeId))?'home':'away',
+      name:a.shortName||a.displayName||'', min:(d.clock&&d.clock.displayValue)||'',
+      pen:!!d.penaltyKick, og:!!d.ownGoal };
+  });
+}
 function buildToday(sb, teamGroup){
   const today=todayLocalIso();
   return (sb.events||[]).filter(ev=>localIsoFromDate(new Date(ev.date))===today).map(ev=>{
@@ -803,7 +819,7 @@ function buildToday(sb, teamGroup){
       group:key, isKO:slug!=='group-stage', stage:stageLabel(slug,teamGroup[ha]||teamGroup[aa]||''), kickoffMs, ko:koFromDate(new Date(ev.date)),
       state:t.state||'pre', name:t.name||'', desc:t.description||'', isHT,
       clock:s.displayClock||'', period:s.period||0, fh,
-      htEndMs, venue:(c.venue&&c.venue.fullName)||(ev.venue&&ev.venue.fullName)||'',
+      htEndMs, venue:(c.venue&&c.venue.fullName)||(ev.venue&&ev.venue.fullName)||'', goals:parseGoals(c),
       home:{ab:ha,nm:home.team.displayName||ha,sc:+home.score||0},
       away:{ab:aa,nm:away.team.displayName||aa,sc:+away.score||0},
     };
@@ -857,7 +873,7 @@ function buildKnockout(sb){
     const venue=(c.venue&&c.venue.fullName)||(ev.venue&&ev.venue.fullName)||'';
     // ESPN numbers knockout matches by event id (e.g. "Round of 32 3 Winner" = the
     // 3rd R32 match in id order), which is the official bracket order — NOT kickoff order.
-    return {round:code, id:+ev.id||null, date:localIsoFromDate(dt), kickoffMs:dt.getTime(), ko:koFromDate(dt), venue,
+    return {round:code, id:+ev.id||null, date:localIsoFromDate(dt), kickoffMs:dt.getTime(), ko:koFromDate(dt), venue, goals:parseGoals(c),
       state:t.state||'pre', decided:t.state==='post', home:mk(home), away:mk(away)};
   }).filter(Boolean).sort((a,b)=>a.kickoffMs-b.kickoffMs);
 }
@@ -1449,7 +1465,7 @@ function knockoutSummaryHTML(){
   }
   return `<div class="stat blue clickable" data-scroll="sec-korounds"><div class="n">${teamsLeft}</div><div class="k">Teams left</div></div>
     <div class="stat red clickable" data-scroll="sec-kowatch"><div class="n">${liveNow}</div><div class="k">In play now</div></div>
-    <div class="stat gold clickable" data-scroll="sec-kowatch"><div class="n">${tiesToday}</div><div class="k">Ties today</div></div>
+    <div class="stat gold clickable" data-scroll="sec-kowatch"><div class="n">${tiesToday}</div><div class="k">Matches today</div></div>
     <div class="stat clickable" data-scroll="sec-korounds"><div class="n" style="color:var(--out)">${eliminated}</div><div class="k">Eliminated</div></div>
     <div class="stat green clickable" data-scroll="sec-final"><div class="n">${matchesLeft}</div><div class="k">Matches to title</div></div>`;
 }
@@ -2014,6 +2030,15 @@ function timeOf(ms){return koFromDate(new Date(ms));}
 
 // a team's current points (group stage, 3/1/0) — null if not found in the standings
 function teamPts(ab){const r=ALL.find(x=>x.team&&x.team.abbr===ab);return r?r.team.pts:null;}
+// goal scorers + minutes for a match (empty when none / not started)
+function goalsHTML(m){
+  if(!m.goals||!m.goals.length) return '';
+  const items=m.goals.map(g=>{
+    const ab=g.side==='home'?m.home.ab:m.away.ab, tag=g.pen?' (P)':g.og?' (OG)':'';
+    return `<span class="gl"><span class="gl-min">${g.min}</span> ${g.name||'—'}${tag} <span class="gl-ab">${ab}</span></span>`;
+  }).join('');
+  return `<div class="goals"><span class="gl-ball">⚽</span>${items}</div>`;
+}
 function todayCard(m){
   const stopped=!!STOPPED[m.name], notPlayed=NOT_PLAYED(m);
   const pH=teamPts(m.home.ab), pA=teamPts(m.away.ab);
@@ -2060,6 +2085,7 @@ function todayCard(m){
         <div class="tl-tm ${hLead?'lead':(aLead?'dim':'')}"><span class="ab">${m.home.ab}</span><span class="nm">${m.home.nm}</span>${ptsCell(pH)}<span class="sc">${showH}</span></div>
         <div class="tl-tm ${aLead?'lead':(hLead?'dim':'')}"><span class="ab">${m.away.ab}</span><span class="nm">${m.away.nm}</span>${ptsCell(pA)}<span class="sc">${showA}</span></div>
       </div>
+      ${goalsHTML(m)}
       <div class="tl-foot">${foot}</div>
       ${(function(){const v=liveVerdict(m);return v?`<div class="tl-verdict ${v.cls}">${v.txt}</div>`:'';})()}
     </div></div>`;
@@ -2491,6 +2517,7 @@ function renderKoNeedCard(m,ko,round,nextLabel){
     <div class="root-col" style="border-right:0">
       <div class="root-col-h"><span class="rc-icon ${icon}">⚔</span>${head}</div>
       ${body}
+      ${goalsHTML(m)}
       <div class="root-team neutral" style="margin-top:6px"><span class="rt-effect" style="margin-left:0">A draw after 90′ → extra time, then penalties. ${reward}</span></div>
     </div>
   </div>`;
