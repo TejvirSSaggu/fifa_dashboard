@@ -318,6 +318,7 @@
   .tl-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
   .tl-grp{font-family:var(--font-data);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
   .tl-grp b{color:var(--flood)}
+  .tl-venue{font-family:var(--font-data);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
   .tl-badge{font-family:var(--font-data);font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:3px 9px;border-radius:999px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
   .tl-badge.pre{background:rgba(50,98,149,.10);color:#326295}
   .tl-badge.live{background:rgba(228,0,43,.10);color:#CC0028}
@@ -328,12 +329,13 @@
   .tl-badge.delay .blip{width:6px;height:6px;border-radius:50%;background:#7A2DA5;animation:pulseP 1.6s infinite}
   .tl-badge.off{background:rgba(113,128,150,.12);color:#4A5568}
   .tl-teams{display:flex;flex-direction:column;gap:7px}
-  .tl-tm{display:grid;grid-template-columns:36px 1fr auto;gap:10px;align-items:center}
+  .tl-tm{display:grid;grid-template-columns:36px 1fr auto auto;gap:10px;align-items:center}
   .tl-tm .ab{font-family:var(--font-data);font-weight:700;font-size:12px;color:var(--mid)}
   .tl-tm .nm{font-family:var(--font-display);font-weight:600;font-size:17px;color:var(--hi);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.01em}
+  .tl-tm .pts{font-family:var(--font-data);font-weight:700;font-size:11px;color:var(--mid);letter-spacing:.04em;white-space:nowrap}
   .tl-tm .sc{font-family:var(--font-data);font-weight:700;font-size:22px;color:var(--hi);min-width:20px;text-align:right}
   .tl-tm.lead .nm{color:#1A2138} .tl-tm.lead .sc{color:var(--through)}
-  .tl-tm.dim .nm,.tl-tm.dim .ab,.tl-tm.dim .sc{color:var(--dim)}
+  .tl-tm.dim .nm,.tl-tm.dim .ab,.tl-tm.dim .sc,.tl-tm.dim .pts{color:var(--dim)}
   .tl-foot{margin-top:11px;padding-top:10px;border-top:1px solid rgba(50,98,149,.08);font-family:var(--font-data);font-size:11.5px;color:var(--mid);line-height:1.5}
   .tl-verdict{margin-top:9px;padding:8px 11px;border-radius:9px;font-family:var(--font-data);font-size:12px;line-height:1.45;border:1px solid transparent}
   .tl-verdict b{font-weight:700}
@@ -746,7 +748,7 @@ function buildToday(sb, teamGroup){
       group:key, isKO:slug!=='group-stage', stage:stageLabel(slug,teamGroup[ha]||teamGroup[aa]||''), kickoffMs, ko:koFromDate(new Date(ev.date)),
       state:t.state||'pre', name:t.name||'', desc:t.description||'', isHT,
       clock:s.displayClock||'', period:s.period||0, fh,
-      htEndMs,
+      htEndMs, venue:(c.venue&&c.venue.fullName)||(ev.venue&&ev.venue.fullName)||'',
       home:{ab:ha,nm:home.team.displayName||ha,sc:+home.score||0},
       away:{ab:aa,nm:away.team.displayName||aa,sc:+away.score||0},
     };
@@ -1518,8 +1520,12 @@ function fmtDur(ms){if(ms<0)ms=0;const s=Math.floor(ms/1000),h=Math.floor(s/3600
 function fmtMMSS(ms){if(ms<0)ms=0;const s=Math.floor(ms/1000);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
 function timeOf(ms){return koFromDate(new Date(ms));}
 
+// a team's current points (group stage, 3/1/0) — null if not found in the standings
+function teamPts(ab){const r=ALL.find(x=>x.team&&x.team.abbr===ab);return r?r.team.pts:null;}
 function todayCard(m){
   const stopped=!!STOPPED[m.name], notPlayed=NOT_PLAYED(m);
+  const pH=teamPts(m.home.ab), pA=teamPts(m.away.ab);
+  const ptsCell=p=>`<span class="pts">${p!=null?p+' pts':''}</span>`;
   const lead=!stopped&&m.state!=='pre'&&m.home.sc!==m.away.sc, hLead=lead&&m.home.sc>m.away.sc, aLead=lead&&m.away.sc>m.home.sc;
   const showH=notPlayed?'–':(m.state==='pre'?0:m.home.sc), showA=notPlayed?'–':(m.state==='pre'?0:m.away.sc);
   const p=m.ko.split(' '), railTime=p[0], railSub=((p[1]||'')+' '+(p[2]||'')).trim();
@@ -1557,10 +1563,10 @@ function todayCard(m){
   return `<div class="tl-row">
     <div class="tl-rail"><div class="tl-time">${railTime}<small>${railSub}</small></div><div class="tl-dot ${dotCls}"></div></div>
     <div class="tl-card ${cardCls}">
-      <div class="tl-top"><span class="tl-grp">${m.isKO?m.stage:('Group <b>'+(m.group||'—')+'</b>')}</span>${badge}</div>
+      <div class="tl-top"><span class="tl-grp">${m.isKO?m.stage:('Group <b>'+(m.group||'—')+'</b>')}</span>${m.venue?`<span class="tl-venue">◍ ${m.venue}</span>`:''}${badge}</div>
       <div class="tl-teams">
-        <div class="tl-tm ${hLead?'lead':(aLead?'dim':'')}"><span class="ab">${m.home.ab}</span><span class="nm">${m.home.nm}</span><span class="sc">${showH}</span></div>
-        <div class="tl-tm ${aLead?'lead':(hLead?'dim':'')}"><span class="ab">${m.away.ab}</span><span class="nm">${m.away.nm}</span><span class="sc">${showA}</span></div>
+        <div class="tl-tm ${hLead?'lead':(aLead?'dim':'')}"><span class="ab">${m.home.ab}</span><span class="nm">${m.home.nm}</span>${ptsCell(pH)}<span class="sc">${showH}</span></div>
+        <div class="tl-tm ${aLead?'lead':(hLead?'dim':'')}"><span class="ab">${m.away.ab}</span><span class="nm">${m.away.nm}</span>${ptsCell(pA)}<span class="sc">${showA}</span></div>
       </div>
       <div class="tl-foot">${foot}</div>
       ${(function(){const v=liveVerdict(m);return v?`<div class="tl-verdict ${v.cls}">${v.txt}</div>`:'';})()}
