@@ -1270,9 +1270,21 @@ function knockoutSummaryHTML(){
   const teamsLeft=Math.max(1,32-eliminated);
   const liveNow=ko.filter(m=>m.state==='in').length;
   const tiesToday=ko.filter(m=>m.date===today).length;
-  const facingToday=ko.filter(m=>m.date===today&&m.state!=='post').length*2;
   const matchesLeft=ko.filter(m=>!m.decided).length;
-  document.getElementById('critCount').textContent= facingToday||teamsLeft;
+  // header headline stat: the current knockout round's progress — matches played and how many remain
+  const RND_LABEL={R32:'Round of 32',R16:'Round of 16',QF:'Quarter-finals',SF:'Semi-finals',FINAL:'Final'};
+  const RND_SEQ=['R32','R16','QF','SF','FINAL'];
+  let curRound=RND_SEQ.find(c=>{const ms=ko.filter(m=>m.round===c);return ms.length&&ms.some(m=>!m.decided);});
+  if(!curRound){for(let i=RND_SEQ.length-1;i>=0;i--){if(ko.some(m=>m.round===RND_SEQ[i])){curRound=RND_SEQ[i];break;}}}
+  const roundMatches=ko.filter(m=>m.round===curRound);
+  const roundTotal=roundMatches.length, roundPlayed=roundMatches.filter(m=>m.decided).length, roundLeft=roundTotal-roundPlayed;
+  if(!curRound||!roundTotal){
+    document.getElementById('critCount').textContent='—';
+    document.getElementById('critLabel').innerHTML='Round of 32<br>awaiting fixtures';
+  }else{
+    document.getElementById('critCount').textContent=roundPlayed;
+    document.getElementById('critLabel').innerHTML=`${RND_LABEL[curRound]} played<br>${roundLeft} of ${roundTotal} left`;
+  }
   return `<div class="stat blue clickable" data-scroll="sec-korounds"><div class="n">${teamsLeft}</div><div class="k">Teams left</div></div>
     <div class="stat red clickable" data-scroll="sec-kowatch"><div class="n">${liveNow}</div><div class="k">In play now</div></div>
     <div class="stat gold clickable" data-scroll="sec-kowatch"><div class="n">${tiesToday}</div><div class="k">Ties today</div></div>
