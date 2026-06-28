@@ -487,8 +487,8 @@
   <div class="tabpanel" id="tab-needs">
   <!-- 02 ROOTING GUIDE -->
   <div class="sec-head"><span class="sec-num">02</span><h2>Who Needs What</h2>
-    <span class="sub">which teams need which result to advance — browse by day or group</span></div>
-  <div class="controls" style="margin-bottom:6px">
+    <span class="sub" id="needsSub">which teams need which result to advance — browse by day or group</span></div>
+  <div class="controls" style="margin-bottom:6px" id="rootViewToggle">
     <button class="chip warn" id="rootViewDay" aria-pressed="true">By Day</button>
     <button class="chip warn" id="rootViewGroup" aria-pressed="false">By Group</button>
   </div>
@@ -1936,6 +1936,18 @@ function renderRooting(){
   const el=document.getElementById('rootingList');
   const dayNav=document.getElementById('rootDayNav');
   const grpNav=document.getElementById('rootGroupNav');
+  const viewToggle=document.getElementById('rootViewToggle');
+  const sub=document.getElementById('needsSub');
+
+  // Knockout mode: single set of ties, no by-day/by-group browsing
+  if(STAGE_COMPLETE){
+    if(viewToggle) viewToggle.style.display='none';
+    dayNav.style.display='none'; grpNav.style.display='none';
+    if(sub) sub.textContent='what each team needs to advance — win or go home';
+    return renderRootingKnockout(el);
+  }
+  if(viewToggle) viewToggle.style.display='';
+  if(sub) sub.textContent='which teams need which result to advance — browse by day or group';
 
   // toggle nav visibility
   dayNav.style.display=rootView==='day'?'':'none';
@@ -1943,6 +1955,67 @@ function renderRooting(){
 
   if(rootView==='group') return renderRootingByGroup(el);
   return renderRootingByDay(el);
+}
+
+// "Who Needs What" for the knockout rounds — each tie is win-or-go-home.
+// Shows what each team needs and who the winner would meet in the next round.
+function renderRootingKnockout(el){
+  const ko=STATE.knockout||[];
+  // the current round = earliest round still containing undecided ties (falls back to last present)
+  const SEQ=['R32','R16','QF','SF','FINAL'];
+  const LABEL={R32:'Round of 32',R16:'Round of 16',QF:'Quarter-finals',SF:'Semi-finals',FINAL:'Final'};
+  let round=SEQ.find(c=>{const ms=ko.filter(m=>m.round===c);return ms.length&&ms.some(m=>!m.decided);});
+  if(!round){for(let i=SEQ.length-1;i>=0;i--){if(ko.some(m=>m.round===SEQ[i])){round=SEQ[i];break;}}}
+  const ties=ko.filter(m=>m.round===round).sort((a,b)=>a.kickoffMs-b.kickoffMs);
+  if(!ties.length){ el.innerHTML='<div class="root-empty">Knockout ties appear here once the bracket is set.</div>'; return; }
+  const nextLabel=LABEL[SEQ[SEQ.indexOf(round)+1]]||'the next round';
+  el.innerHTML=ties.map(m=>renderKoNeedCard(m,ko,round,nextLabel)).join('');
+}
+// who the winner of tie `m` would meet in the next round, via the feeder linkage
+function koNextOpponent(m,ko,round){
+  const SEQ=['R32','R16','QF','SF','FINAL'];
+  const next=SEQ[SEQ.indexOf(round)+1]; if(!next) return '';
+  const cur=ko.filter(x=>x.round===round).sort((a,b)=>a.kickoffMs-b.kickoffMs);
+  const n=cur.indexOf(m)+1; if(n<1) return '';
+  const tie=ko.filter(x=>x.round===next).find(x=>(x.home.slot&&x.home.slot.feederNum===n)||(x.away.slot&&x.away.slot.feederNum===n));
+  if(!tie) return '';
+  const other=(tie.home.slot&&tie.home.slot.feederNum===n)?tie.away.slot:tie.home.slot;
+  if(!other||other.feederNum==null) return '';
+  const opp=cur[other.feederNum-1]; if(!opp) return '';
+  return opp.decided ? (opp.home.win?opp.home.ab:opp.away.ab) : (opp.home.ab+' / '+opp.away.ab);
+}
+function renderKoNeedCard(m,ko,round,nextLabel){
+  const LABEL={R32:'Round of 32',R16:'Round of 16',QF:'Quarter-finals',SF:'Semi-finals',FINAL:'Final'};
+  const w=koWhen(m), opp=koNextOpponent(m,ko,round);
+  const reward=opp?`Winner meets ${opp} in the ${nextLabel}.`:`Winner advances to the ${nextLabel}.`;
+  const teamLine=(s,cls,effect)=>`<div class="root-team ${cls}"><span class="rt-abbr">${s.ab}</span>${s.nm}<span class="rt-effect">· ${effect}</span></div>`;
+  let body, icon='draw', head;
+  if(m.state==='post'&&m.decided){
+    const win=m.home.win?m.home:m.away, lose=m.home.win?m.away:m.home, pens=m.home.sc===m.away.sc;
+    head=`Full time${pens?' · penalties':''} — ${m.home.sc}–${m.away.sc}`;
+    body=teamLine(win,'helps','Advances'+(pens?' on penalties':''))+teamLine(lose,'eliminates','Eliminated — out of the World Cup');
+  } else if(m.state==='in'){
+    const hL=m.home.sc>m.away.sc, aL=m.away.sc>m.home.sc;
+    head=`Live · ${m.home.sc}–${m.away.sc}`;
+    if(hL){ body=teamLine(m.home,'helps','Advancing if it ends now')+teamLine(m.away,'hurts','Going out if it ends now'); }
+    else if(aL){ body=teamLine(m.away,'helps','Advancing if it ends now')+teamLine(m.home,'hurts','Going out if it ends now'); }
+    else { body=teamLine(m.home,'neutral','Level — needs the win or penalties')+teamLine(m.away,'neutral','Level — needs the win or penalties'); }
+  } else {
+    head='Win or go home';
+    body=teamLine(m.home,'neutral','Win to reach the '+nextLabel)+teamLine(m.away,'neutral','Win to reach the '+nextLabel);
+  }
+  return `<div class="root-card">
+    <div class="root-card-h">
+      <div><div class="rc-grp">${LABEL[round]||round}</div>
+        <div class="rc-match">${m.home.nm}<span class="rc-v">vs</span>${m.away.nm}</div></div>
+      <div class="rc-ko">${w.txt}${m.venue?'<br>'+m.venue:''}</div>
+    </div>
+    <div class="root-col" style="border-right:0">
+      <div class="root-col-h"><span class="rc-icon ${icon}">⚔</span>${head}</div>
+      ${body}
+      <div class="root-team neutral" style="margin-top:6px"><span class="rt-effect" style="margin-left:0">A draw after 90′ → extra time, then penalties. ${reward}</span></div>
+    </div>
+  </div>`;
 }
 
 function renderRootingByDay(el){
@@ -1994,7 +2067,16 @@ function renderRootingByGroup(el){
   el.innerHTML=cards.map(renderRootCard).join('');
 }
 
-function renderAll(){recompute();renderPhase();renderLiveBanner();renderSummary();renderToday();try{renderRooting();}catch(e){console.error('renderRooting error:',e);document.getElementById('rootingList').innerHTML='<div class="root-empty">Analysis error — try refreshing.</div>';}renderBoard();renderUpdate();renderGrid();renderThirds();renderProjectedBracket();renderKnockoutWatch();renderKnockoutRounds();renderFinal();}
+// Must-Not-Lose is a group-stage concept; hide its tab once the knockouts begin.
+function updateTabAvailability(){
+  const btn=document.querySelector('#tabbar .tab[data-tab="mustnotlose"]');
+  if(!btn) return;
+  btn.style.display=STAGE_COMPLETE?'none':'';
+  if(STAGE_COMPLETE && btn.getAttribute('aria-selected')==='true' && typeof window.activateTab==='function'){
+    window.activateTab('today');
+  }
+}
+function renderAll(){recompute();renderPhase();renderLiveBanner();renderSummary();renderToday();try{renderRooting();}catch(e){console.error('renderRooting error:',e);document.getElementById('rootingList').innerHTML='<div class="root-empty">Analysis error — try refreshing.</div>';}renderBoard();renderUpdate();renderGrid();renderThirds();renderProjectedBracket();renderKnockoutWatch();renderKnockoutRounds();renderFinal();updateTabAvailability();}
 
 /* ===== controls ===== */
 document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-filter]').forEach(x=>x.setAttribute('aria-pressed','false'));b.setAttribute('aria-pressed','true');boardFilter=b.dataset.filter;renderBoard();});
@@ -2020,6 +2102,7 @@ refresh();
   const KEY='wc26.tab', valid=['today','needs','mustnotlose','standings','thirds','projbracket','knockout','how'];
   window.activateTab=function(id,scroll){
     if(valid.indexOf(id)<0) id='today';
+    if(id==='mustnotlose' && STAGE_COMPLETE) id='today';   // tab is hidden in the knockouts
     valid.forEach(t=>{
       const p=document.getElementById('tab-'+t); if(p) p.classList.toggle('active', t===id);
     });
