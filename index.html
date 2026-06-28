@@ -1065,6 +1065,7 @@ async function refresh(quiet){
     STATE.groups=groups; STATE.live=true; STATE.refIso=todayIsoET();
     STATE.today=buildToday(sb,teamGroup); STATE.allMatches=buildAllMatches(sb,teamGroup);
     STATE.knockout=buildKnockout(sb); STATE.fetchedAt=Date.now();
+    if(window.__DEMO && !STATE.knockout.length) STATE.knockout=demoKnockout();   // keep demo bracket alive pre-R32
     pruneResults();
     renderAll();
     const t=new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'});
@@ -1771,12 +1772,57 @@ function renderProjectedBracket(){
   wireBracketControls();
   if(!brkFitted){ brkPZ.fit(res.boardW,res.boardH); if(document.getElementById('brkStage').getBoundingClientRect().width) brkFitted=true; }
 }
+// Demo mode (?demo=bracket): synthesise a full knockout skeleton from the current
+// standings so the bracket is explorable before the real Round of 32 begins.
+function demoKnockout(){
+  const qs=[]; groupKeysSorted().forEach(k=>{ const g=DG[k]; if(!g) return; const ord=fifaOrder(g);
+    [0,1].forEach(i=>{ const ab=ord[i]; const t=g.teams.find(x=>x.abbr===ab); if(t) qs.push({ab:t.abbr,nm:t.name}); }); });
+  (THIRDS||[]).filter(t=>t.in).slice(0,8).forEach(t=>qs.push({ab:t.abbr,nm:t.name}));
+  if(qs.length<32) for(let i=qs.length;i<32;i++) qs.push({ab:'T'+(i+1),nm:'Team '+(i+1)});
+  const pick=i=>qs[i]||{ab:'T'+i,nm:'Team '+i};
+  const team=t=>({ab:t.ab,nm:t.nm,sc:0,win:false,slot:{kind:'team',ab:t.ab,nm:t.nm}});
+  const feeder=(r,n)=>({ab:'',nm:'',sc:0,win:false,slot:{kind:'feeder',feederRound:r,feederNum:n,result:'winner'}});
+  const VEN=['MetLife Stadium','SoFi Stadium','AT&T Stadium','NRG Stadium','Mercedes-Benz Stadium','Lincoln Financial Field','Gillette Stadium',"Levi's Stadium",'Hard Rock Stadium','Lumen Field','Arrowhead Stadium','BMO Field','BC Place','Estadio Azteca','Estadio Akron','Estadio BBVA'];
+  const ko=[]; let t0=Date.parse('2026-06-29T16:00:00Z');
+  for(let i=0;i<16;i++){ const h=team(pick(i*2)), a=team(pick(i*2+1)), dec=i<4; if(dec){h.sc=2;a.sc=1;h.win=true;}
+    ko.push({round:'R32',kickoffMs:t0+i*108e5,date:localIsoFromDate(new Date(t0+i*108e5)),ko:koFromDate(new Date(t0+i*108e5)),venue:VEN[i],state:dec?'post':'pre',decided:dec,home:h,away:a}); }
+  const tier=(round,count,prev,base)=>{ for(let i=1;i<=count;i++) ko.push({round,kickoffMs:base+i*108e5,date:localIsoFromDate(new Date(base+i*108e5)),ko:koFromDate(new Date(base+i*108e5)),venue:VEN[(i*3)%16],state:'pre',decided:false,home:feeder(prev,2*i-1),away:feeder(prev,2*i)}); };
+  tier('R16',8,'R32',Date.parse('2026-07-04T16:00:00Z'));
+  tier('QF',4,'R16',Date.parse('2026-07-09T16:00:00Z'));
+  tier('SF',2,'QF',Date.parse('2026-07-14T16:00:00Z'));
+  ko.push({round:'FINAL',kickoffMs:Date.parse('2026-07-19T16:00:00Z'),date:'2026-07-19',ko:koFromDate(new Date(Date.parse('2026-07-19T16:00:00Z'))),venue:'MetLife Stadium',state:'pre',decided:false,home:feeder('SF',1),away:feeder('SF',2)});
+  return ko;
+}
 // fit the board the first time the tab is opened (stage has no size while hidden)
 window.__brkShow=function(){ if(brkPZ&&brkDims&&!brkFitted){ brkPZ.fit(brkDims.boardW,brkDims.boardH);
   if(document.getElementById('brkStage').getBoundingClientRect().width) brkFitted=true; }
   if(window._brkBg) window._brkBg.start(); };
 
-/* ===== stadium "drone descent" background (procedural) ===== */
+/* ===== stadium photo mapping ===== */
+// WC2026 venues -> image slug. ESPN may use the real stadium name or FIFA's
+// tournament name, so each slug carries several keyword aliases.
+const VENUE_SLUGS=[
+  {slug:'metlife',kw:['metlife','new york','new jersey','east rutherford']},
+  {slug:'sofi',kw:['sofi','inglewood','los angeles']},
+  {slug:'att',kw:['at&t','arlington','dallas']},
+  {slug:'nrg',kw:['nrg','houston']},
+  {slug:'mercedes-benz',kw:['mercedes','atlanta']},
+  {slug:'lincoln-financial',kw:['lincoln financial','philadelphia']},
+  {slug:'gillette',kw:['gillette','foxborough','foxboro','new england','boston']},
+  {slug:'levis',kw:["levi's",'levi','santa clara','bay area','san francisco']},
+  {slug:'hard-rock',kw:['hard rock','miami']},
+  {slug:'lumen',kw:['lumen','seattle']},
+  {slug:'arrowhead',kw:['arrowhead','geha','kansas city']},
+  {slug:'bmo-field',kw:['bmo','toronto']},
+  {slug:'bc-place',kw:['bc place','vancouver']},
+  {slug:'azteca',kw:['azteca','banorte','mexico city']},
+  {slug:'akron',kw:['akron','guadalajara','zapopan']},
+  {slug:'bbva',kw:['bbva','monterrey','guadalupe']},
+];
+function venueSlug(venue){ if(!venue) return null; const v=String(venue).toLowerCase();
+  const hit=VENUE_SLUGS.find(s=>s.kw.some(k=>v.indexOf(k)>=0)); return hit?hit.slug:null; }
+
+/* ===== stadium "drone descent" background (procedural + photo) ===== */
 // Phase-2 procedural fallback: a night sky that descends into a floodlit pitch as
 // you zoom into a tie. Phase 3 layers real stadium photos over this.
 function createBracketBg(canvas, stage){
@@ -1785,7 +1831,25 @@ function createBracketBg(canvas, stage){
   const dpr=Math.min(2, window.devicePixelRatio||1);
   let W=0,H=0,scale=1,tx=0,ty=0,nodes=[],raf=null,running=false,descent=0,frame=0;
   let stars=[], confetti=[], lastChamp=null;
+  const imgCache={}; let curSlug=null, imgFade=0;
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  // lazy-load a stadium photo the first time we descend toward its venue
+  function ensureImg(slug){ if(!slug||imgCache[slug]!==undefined) return imgCache[slug];
+    const im=new Image(); im.__ok=false;
+    im.onload=()=>{ im.__ok=true; if(reduced && !running){ syncVenue(); draw(); } };
+    im.onerror=()=>{im.__ok=false;im.__fail=true;};
+    im.src='stadiums/'+slug+'.webp'; imgCache[slug]=im; return im; }
+  function photoReady(slug){ const im=slug&&imgCache[slug]; return im&&im.__ok&&!im.__fail; }
+  function drawPhotoCover(im,d){
+    const iw=im.naturalWidth, ih=im.naturalHeight; if(!iw||!ih) return;
+    const zoom=1+d*0.22;                                  // drone push-in with descent
+    const s=Math.max(W/iw,H/ih)*zoom, dw=iw*s, dh=ih*s;
+    const px=tx*0.01, py=ty*0.01;
+    ctx.save(); ctx.globalAlpha=clamp(d*imgFade,0,1);
+    ctx.drawImage(im,(W-dw)/2+px,(H-dh)/2+py-d*10,dw,dh);
+    const g=ctx.createLinearGradient(0,H*0.45,0,H); g.addColorStop(0,'rgba(8,5,12,0)'); g.addColorStop(1,'rgba(8,5,12,.66)');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H); ctx.restore();
+  }
   function resize(){ const r=stage.getBoundingClientRect(); if(!r.width) return; W=r.width; H=r.height;
     canvas.width=W*dpr; canvas.height=H*dpr;
     stars=Array.from({length:60},()=>({x:Math.random()*W,y:Math.random()*H*0.7,r:Math.random()*1.3+0.3,p:Math.random()*6})); }
@@ -1795,6 +1859,14 @@ function createBracketBg(canvas, stage){
   function drawStars(){ ctx.save(); stars.forEach(s=>{ const tw=reduced?0.6:(0.5+0.5*Math.sin(frame*0.03+s.p));
     ctx.globalAlpha=0.5*tw*(1-descent); ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill(); }); ctx.restore(); }
   function drawStadium(d){
+    // real stadium photo when available, otherwise the procedural floodlit pitch
+    if(photoReady(curSlug) && imgFade>0.02){ drawPhotoCover(imgCache[curSlug],d);
+      const v=window._brkActiveVenue;
+      if(v && d>0.35){ ctx.save(); ctx.globalAlpha=clamp((d-0.35)/0.5,0,1)*imgFade;
+        ctx.fillStyle='rgba(255,255,255,.9)'; ctx.font='600 12px "Roboto Mono",monospace'; ctx.textAlign='center';
+        ctx.fillText('◍ '+String(v).toUpperCase(), W/2, H-16); ctx.restore(); }
+      if(imgFade>0.9) return;                              // photo fully in; skip procedural
+    }
     const px=tx*0.015, py=ty*0.015, cx=W/2+px, cy=H*0.60+py;
     // floodlight glows brighten with descent
     [[W*0.16,H*0.10],[W*0.84,H*0.10]].forEach(([lx,ly])=>{ const g=ctx.createRadialGradient(lx+px,ly+py,0,lx+px,ly+py,200+220*d);
@@ -1821,15 +1893,23 @@ function createBracketBg(canvas, stage){
       ctx.save(); ctx.translate(c.x,c.y); ctx.rotate(c.rot); ctx.fillStyle=cols[c.c]; ctx.fillRect(-3,-4,6,8); ctx.restore(); });
     confetti=confetti.filter(c=>c.y<H+20); }
   function draw(){ ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,W,H); drawStars(); if(descent>0.04) drawStadium(descent); drawConfetti(); }
+  function syncVenue(){
+    const n=centeredNode(); const venue=n&&n.match?n.match.venue:null;
+    window._brkActiveVenue=venue;
+    const slug=venueSlug(venue);
+    if(slug!==curSlug){ curSlug=slug; imgFade=0; if(slug) ensureImg(slug); }
+    const tgt=photoReady(curSlug)?1:0;
+    imgFade += reduced ? (tgt-imgFade) : (tgt-imgFade)*0.1;
+  }
   function step(){ frame++;
     const target=clamp((scale-0.85)/(1.9-0.85),0,1);
     descent+= reduced ? (target-descent) : (target-descent)*0.08;
-    window._brkActiveVenue=(function(){ const n=centeredNode(); return n&&n.match?n.match.venue:null; })();
+    syncVenue();
     draw();
     if(running && !reduced) raf=requestAnimationFrame(step); else raf=null;
   }
   return {
-    onTransform(s,x,y){ scale=s; tx=x; ty=y; if(reduced){ if(!W)resize(); const target=clamp((scale-0.85)/(1.9-0.85),0,1); descent=target; window._brkActiveVenue=(centeredNode()||{}).match&&centeredNode().match.venue||null; draw(); } },
+    onTransform(s,x,y){ scale=s; tx=x; ty=y; if(reduced){ if(!W)resize(); descent=clamp((scale-0.85)/(1.9-0.85),0,1); syncVenue(); draw(); } },
     setNodes(n){ nodes=n||[]; },
     start(){ if(!W) resize(); if(running) return; running=true; if(!reduced){ if(raf)cancelAnimationFrame(raf); raf=requestAnimationFrame(step);} else draw(); },
     stop(){ running=false; if(raf){cancelAnimationFrame(raf);raf=null;} },
@@ -2465,6 +2545,10 @@ document.getElementById('rootGrpNext').onclick=()=>{if(rootGrpIdx<groupKeysSorte
 
 /* ===== boot: render snapshot instantly, then auto-refresh ===== */
 renderAll();
+// ?demo / ?demo=bracket — explore the interactive bracket before the real Round of 32
+if(/[?&]demo\b/.test(location.search) && !(STATE.knockout||[]).length){
+  window.__DEMO=true; STATE.knockout=demoKnockout(); renderAll();
+}
 refresh();
 
 (function initTabs(){
@@ -2485,6 +2569,7 @@ refresh();
   };
   document.querySelectorAll('#tabbar .tab').forEach(b=>b.addEventListener('click',()=>window.activateTab(b.dataset.tab,true)));
   let start='today'; try{const s=localStorage.getItem(KEY); if(s&&valid.indexOf(s)>=0) start=s;}catch(e){}
+  if(window.__DEMO) start='projbracket';
   window.activateTab(start);
 })();
 </script>
