@@ -863,6 +863,101 @@ function projectedRound(state){
   if(!state.done.SF)  return 'FINAL';
   return null;
 }
+// Build a full single-elimination tree (R32 -> Final) from knockout matches.
+// Structure follows feeder links when the bracket skeleton is published, and
+// falls back to canonical pairing of R32 ties by kickoff order. `picks` maps a
+// tie key (e.g. "R16#3") to the abbreviation the user predicts to win it.
+// Returns the annotated FINAL node (root), or null when no R32 ties exist.
+function buildBracketTree(matches, picks){
+  picks=picks||{};
+  const ROUNDS=['R32','R16','QF','SF','FINAL'];
+  const byKO={};
+  ROUNDS.forEach(r=>{ byKO[r]=(matches||[]).filter(m=>m.round===r).slice().sort((a,b)=>a.kickoffMs-b.kickoffMs); });
+  if(!byKO.R32.length) return null;
+  const keyOf=(round,m)=>round+'#'+(byKO[round].indexOf(m)+1);
+  // a real-team slot, or null when the participant isn't known yet (placeholder)
+  function teamSlot(side){
+    if(!side) return null;
+    const k=side.slot&&side.slot.kind;
+    if(k&&k!=='team') return null;          // pos / third / feeder placeholder
+    if(!side.ab) return null;
+    return {ab:side.ab, nm:side.nm||side.ab};
+  }
+  // structural skeleton from feeders, top-down from the Final
+  function build(match, round){
+    const node={round, key:keyOf(round,match), match};
+    if(round==='R32'){ node.kids=null; return node; }
+    const prev=ROUNDS[ROUNDS.indexOf(round)-1];
+    const kid=side=>{
+      const s=side&&side.slot;
+      if(s&&s.kind==='feeder'&&s.feederRound===prev&&s.feederNum&&byKO[prev][s.feederNum-1])
+        return byKO[prev][s.feederNum-1];
+      return null;
+    };
+    const hk=kid(match.home), ak=kid(match.away);
+    node.kids=(hk&&ak)?[build(hk,prev), build(ak,prev)]:null;
+    return node;
+  }
+  const complete=node=> node.round==='R32' ? true : (!!node.kids && complete(node.kids[0]) && complete(node.kids[1]));
+  // canonical fallback: pair leaves up the tree, synthesising internal ties
+  function canonical(){
+    let level=byKO.R32.map(m=>({round:'R32', key:keyOf('R32',m), match:m, kids:null}));
+    let ri=1;
+    while(level.length>1){
+      const round=ROUNDS[ri++], next=[];
+      for(let j=0;j<level.length;j+=2){
+        const m=(byKO[round]&&byKO[round][j/2])||null;
+        next.push({round, key:round+'#'+(j/2+1), match:m, kids:[level[j], level[j+1]]});
+      }
+      level=next;
+    }
+    return level[0];
+  }
+  let root=null;
+  if(byKO.FINAL[0]){ const r=build(byKO.FINAL[0],'FINAL'); if(complete(r)) root=r; }
+  if(!root) root=canonical();
+  // bottom-up: participants, then winner (locked real result -> user pick -> none)
+  function annotate(node){
+    if(node.kids) node.kids.forEach(annotate);
+    if(node.round==='R32'){
+      node.participants=[teamSlot(node.match&&node.match.home), teamSlot(node.match&&node.match.away)];
+    } else {
+      node.participants=[node.kids[0]&&node.kids[0].winner, node.kids[1]&&node.kids[1].winner];
+    }
+    node.winner=null;
+    const m=node.match;
+    if(m&&m.decided){
+      const w=(m.home.win&&m.home)||(m.away.win&&m.away)||null;
+      if(w) node.winner={ab:w.ab, nm:w.nm||w.ab, source:'locked'};
+    }
+    if(!node.winner && picks[node.key]){
+      const p=node.participants, pick=picks[node.key];
+      const hit=(p[0]&&p[0].ab===pick&&p[0])||(p[1]&&p[1].ab===pick&&p[1])||null;
+      if(hit) node.winner={ab:hit.ab, nm:hit.nm, source:'predicted'};
+    }
+    return node;
+  }
+  return annotate(root);
+}
+// Flatten the tree into a render-friendly, symmetric model (left/right halves).
+function bracketModel(matches, picks){
+  const root=buildBracketTree(matches, picks);
+  if(!root) return null;
+  const perRound=(node,map)=>{ if(!node) return map; (map[node.round]=map[node.round]||[]).push(node);
+    if(node.kids){ perRound(node.kids[0],map); perRound(node.kids[1],map); } return map; };
+  const left=root.kids?perRound(root.kids[0],{}):{};
+  const right=root.kids?perRound(root.kids[1],{}):{};
+  let predicted=0, remaining=0, openReady=0;
+  (function visit(n){ if(!n) return;
+    const locked=n.winner&&n.winner.source==='locked';
+    if(!locked) remaining++;
+    if(n.winner&&n.winner.source==='predicted') predicted++;
+    if(!n.winner && n.participants && n.participants[0] && n.participants[1]) openReady++;
+    if(n.kids){ visit(n.kids[0]); visit(n.kids[1]); }
+  })(root);
+  return { root, left, right, final:root, champion:root.winner||null,
+           counts:{predicted, remaining, openReady} };
+}
 // </bracket-pure>
 function projGroupPos(rank, group){
   const g=DG[group]; if(!g||!g.teams) return null;

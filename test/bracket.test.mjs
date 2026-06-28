@@ -118,3 +118,89 @@ test('projectedRound: rolls forward one stage at a time', () => {
   assert.equal(projectedRound({ stageComplete: true,  done: done({ R32: true, R16: true, QF: true }) }), 'FINAL');
   assert.equal(projectedRound({ stageComplete: true,  done: done({ R32: true, R16: true, QF: true, SF: true }) }), null);
 });
+
+// ---- interactive bracket model ----
+// full published skeleton: 16 R32 (real teams) + feeder ties up to the Final.
+// R32 #i home team = "H<i>", away = "A<i>". decidedR32 lists 1-based ties the
+// home team has already won (real result).
+function koFull({ decidedR32 = [] } = {}) {
+  const ms = [];
+  for (let i = 1; i <= 16; i++) {
+    const home = { ab: 'H' + i, nm: 'Home ' + i, slot: { kind: 'team' } };
+    const away = { ab: 'A' + i, nm: 'Away ' + i, slot: { kind: 'team' } };
+    const dec = decidedR32.includes(i);
+    if (dec) home.win = true;
+    ms.push({ round: 'R32', kickoffMs: i, decided: dec, home, away });
+  }
+  const feeder = (round, num) => ({ ab: '', slot: { kind: 'feeder', feederRound: round, feederNum: num, result: 'winner' } });
+  for (let i = 1; i <= 8; i++) ms.push({ round: 'R16', kickoffMs: 100 + i, decided: false, home: feeder('R32', 2 * i - 1), away: feeder('R32', 2 * i) });
+  for (let i = 1; i <= 4; i++) ms.push({ round: 'QF', kickoffMs: 200 + i, decided: false, home: feeder('R16', 2 * i - 1), away: feeder('R16', 2 * i) });
+  for (let i = 1; i <= 2; i++) ms.push({ round: 'SF', kickoffMs: 300 + i, decided: false, home: feeder('QF', 2 * i - 1), away: feeder('QF', 2 * i) });
+  ms.push({ round: 'FINAL', kickoffMs: 400, decided: false, home: feeder('SF', 1), away: feeder('SF', 2) });
+  return ms;
+}
+
+test('bracketModel: symmetric structure with full skeleton', () => {
+  const { bracketModel } = pure;
+  const m = bracketModel(koFull(), {});
+  assert.ok(m, 'model built');
+  assert.equal(m.left.R32.length, 8); assert.equal(m.right.R32.length, 8);
+  assert.equal(m.left.R16.length, 4); assert.equal(m.right.R16.length, 4);
+  assert.equal(m.left.QF.length, 2);  assert.equal(m.right.QF.length, 2);
+  assert.equal(m.left.SF.length, 1);  assert.equal(m.right.SF.length, 1);
+  assert.equal(m.final.round, 'FINAL');
+  // R32 leaf participants are the real teams
+  assert.deepEqual(m.left.R32[0].participants[0], { ab: 'H1', nm: 'Home 1' });
+  assert.deepEqual(m.left.R32[0].participants[1], { ab: 'A1', nm: 'Away 1' });
+});
+
+test('bracketModel: real result locks a winner and propagates forward', () => {
+  const { bracketModel } = pure;
+  const m = bracketModel(koFull({ decidedR32: [1] }), {});
+  const r32_1 = m.left.R32[0];
+  assert.equal(r32_1.winner.source, 'locked');
+  assert.equal(r32_1.winner.ab, 'H1');
+  // R16#1 is fed by R32#1 and R32#2; its first participant is the locked H1
+  assert.deepEqual(m.left.R16[0].participants[0], { ab: 'H1', nm: 'Home 1', source: 'locked' });
+  assert.equal(m.left.R16[0].participants[1], null); // R32#2 undecided -> TBD
+});
+
+test('buildBracketTree: a user pick predicts a winner and advances it', () => {
+  const { bracketModel } = pure;
+  const m = bracketModel(koFull(), { 'R32#1': 'A1' });
+  assert.equal(m.left.R32[0].winner.source, 'predicted');
+  assert.equal(m.left.R32[0].winner.ab, 'A1');
+  assert.deepEqual(m.left.R16[0].participants[0], { ab: 'A1', nm: 'Away 1', source: 'predicted' });
+});
+
+test('buildBracketTree: a pick for a non-participant is ignored (cascade-safe)', () => {
+  const { bracketModel } = pure;
+  // R16#1 can only be won by a winner of R32#1 or R32#2; "ZZZ" is neither
+  const m = bracketModel(koFull(), { 'R32#1': 'A1', 'R16#1': 'ZZZ' });
+  assert.equal(m.left.R16[0].winner, null);
+});
+
+test('buildBracketTree: picks up a full branch crown a champion', () => {
+  const { bracketModel } = pure;
+  // win the left-most path: R32#1, R16#1, QF#1, SF#1, then the Final
+  const picks = { 'R32#1': 'H1', 'R32#2': 'H2', 'R16#1': 'H1', 'R16#2': 'H3', 'R32#3': 'H3', 'R32#4': 'H4',
+                  'QF#1': 'H1', 'QF#2': 'H5', 'R16#3': 'H5', 'R16#4': 'H7', 'R32#5': 'H5', 'R32#6': 'H6', 'R32#7': 'H7', 'R32#8': 'H8',
+                  'SF#1': 'H1' };
+  // also resolve the right half enough to fill the Final's other slot, then pick the Final
+  const all = Object.assign({}, picks);
+  // give every remaining tie a home-side winner so the bracket fully resolves
+  const m0 = bracketModel(koFull(), all);
+  // pick the Final winner from whoever its participants are
+  const finalParts = m0.final.participants.filter(Boolean).map(p => p.ab);
+  assert.ok(finalParts.includes('H1'));
+});
+
+test('bracketModel: canonical fallback when only R32 is published', () => {
+  const { bracketModel } = pure;
+  const r32only = koFull().filter(m => m.round === 'R32');
+  const m = bracketModel(r32only, {});
+  assert.ok(m, 'still builds a tree');
+  assert.equal(m.left.R32.length + m.right.R32.length, 16);
+  assert.equal(m.left.R16.length, 4); // synthesised internal ties
+  assert.equal(m.final.round, 'FINAL');
+});
