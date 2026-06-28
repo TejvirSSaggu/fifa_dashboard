@@ -855,7 +855,9 @@ function buildKnockout(sb){
     const s=ev.status||{}, t=s.type||{}, dt=new Date(ev.date);
     const mk=x=>({ab:x.team.abbreviation||'?',nm:x.team.displayName||x.team.shortDisplayName||x.team.abbreviation||'TBD',sc:scoreOf(x),win:!!x.winner,slot:parseSlot(x.team)});
     const venue=(c.venue&&c.venue.fullName)||(ev.venue&&ev.venue.fullName)||'';
-    return {round:code, date:localIsoFromDate(dt), kickoffMs:dt.getTime(), ko:koFromDate(dt), venue,
+    // ESPN numbers knockout matches by event id (e.g. "Round of 32 3 Winner" = the
+    // 3rd R32 match in id order), which is the official bracket order — NOT kickoff order.
+    return {round:code, id:+ev.id||null, date:localIsoFromDate(dt), kickoffMs:dt.getTime(), ko:koFromDate(dt), venue,
       state:t.state||'pre', decided:t.state==='post', home:mk(home), away:mk(away)};
   }).filter(Boolean).sort((a,b)=>a.kickoffMs-b.kickoffMs);
 }
@@ -926,8 +928,11 @@ function projectedRound(state){
 function buildBracketTree(matches, picks){
   picks=picks||{};
   const ROUNDS=['R32','R16','QF','SF','FINAL'];
+  // Index each round by official match number: ESPN's event id when present
+  // (the order its "Round of X N Winner" feeders refer to), else kickoff order.
+  const seq=m=>m.id!=null?m.id:m.kickoffMs;
   const byKO={};
-  ROUNDS.forEach(r=>{ byKO[r]=(matches||[]).filter(m=>m.round===r).slice().sort((a,b)=>a.kickoffMs-b.kickoffMs); });
+  ROUNDS.forEach(r=>{ byKO[r]=(matches||[]).filter(m=>m.round===r).slice().sort((a,b)=>seq(a)-seq(b)); });
   if(!byKO.R32.length) return null;
   const keyOf=(round,m)=>round+'#'+(byKO[round].indexOf(m)+1);
   // a real-team slot, or null when the participant isn't known yet (placeholder)
