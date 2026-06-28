@@ -1844,8 +1844,8 @@ function createBracketBg(canvas, stage){
   const imgCache={}; let curSlug=null, imgFade=0;
   // eagle's-eye aerial pitch shown when zoomed out; crossfades into a venue as you descend
   const overviewImg=new Image(); overviewImg.__ok=false;
-  overviewImg.onload=()=>{ overviewImg.__ok=true; if(reduced && !running) draw(); };
-  overviewImg.onerror=()=>{ overviewImg.__fail=true; };
+  overviewImg.onload=()=>{ overviewImg.__ok=true; dirty=true; if(reduced && !running) draw(); };  // repaint once the pitch is ready
+  overviewImg.onerror=()=>{ overviewImg.__fail=true; dirty=true; };
   overviewImg.src='stadiums/_overview.webp';
   const overviewReady=()=>overviewImg.__ok && !overviewImg.__fail;
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -1858,8 +1858,8 @@ function createBracketBg(canvas, stage){
   // lazy-load a stadium photo the first time we descend toward its venue
   function ensureImg(slug){ if(!slug||imgCache[slug]!==undefined) return imgCache[slug];
     const im=new Image(); im.__ok=false;
-    im.onload=()=>{ im.__ok=true; if(reduced && !running){ syncVenue(); draw(); } };
-    im.onerror=()=>{im.__ok=false;im.__fail=true;};
+    im.onload=()=>{ im.__ok=true; dirty=true; if(reduced && !running){ syncVenue(); draw(); } };  // repaint when the photo lands
+    im.onerror=()=>{im.__ok=false;im.__fail=true;dirty=true;};
     im.src='stadiums/'+slug+'.webp'; imgCache[slug]=im; return im; }
   function photoReady(slug){ const im=slug&&imgCache[slug]; return im&&im.__ok&&!im.__fail; }
   function resize(){ const r=stage.getBoundingClientRect(); if(!r.width) return; W=r.width; H=r.height;
@@ -1936,7 +1936,7 @@ function createBracketBg(canvas, stage){
   return {
     onTransform(s,x,y){ scale=s; tx=x; ty=y; dirty=true; if(reduced){ if(!W)resize(); descent=clamp((scale-0.85)/(1.9-0.85),0,1); syncVenue(); draw(); } },
     setNodes(n){ nodes=n||[]; },
-    start(){ if(!W) resize(); if(running) return; running=true; if(!reduced){ if(raf)cancelAnimationFrame(raf); raf=requestAnimationFrame(step);} else draw(); },
+    start(){ if(!W) resize(); dirty=true; if(running) return; running=true; if(!reduced){ if(raf)cancelAnimationFrame(raf); raf=requestAnimationFrame(step);} else draw(); },
     stop(){ running=false; if(raf){cancelAnimationFrame(raf);raf=null;} },
     resize, reduced,
     burstConfetti(){ if(reduced) return; if(!W)resize(); for(let i=0;i<120;i++) confetti.push({x:W/2+(Math.random()-0.5)*W*0.5,y:H*0.3,vx:(Math.random()-0.5)*6,vy:Math.random()*-2,vr:(Math.random()-0.5)*0.3,rot:Math.random()*6,c:i%5}); },
