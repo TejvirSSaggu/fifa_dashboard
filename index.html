@@ -862,6 +862,22 @@ const KO_ROUNDS=[
 const KO_CODE={}; KO_ROUNDS.forEach(r=>KO_CODE[r.slug]=r.code);
 const KO_SLUG_LABEL={}; KO_ROUNDS.forEach(r=>KO_SLUG_LABEL[r.slug]=r.label);
 function stageLabel(slug,groupKey){return KO_SLUG_LABEL[slug]||(groupKey?'Group '+groupKey:'Match');}
+// Official FIFA match numbers (e.g. R32 = 73-88) come only from ESPN's core API,
+// not the scoreboard. They're static, so fetch once and cache. "Round of 32 N
+// Winner" feeders refer to the Nth match by this number — NOT by event id.
+let MATCHNUMS=(function(){ try{return JSON.parse(localStorage.getItem('wc26.matchnums')||'{}')||{}}catch(e){return {}} })();
+function attachMatchNums(ko){ (ko||[]).forEach(m=>{ if(m.id!=null && MATCHNUMS[m.id]!=null) m.matchNumber=MATCHNUMS[m.id]; }); }
+async function ensureMatchNumbers(ko){
+  const missing=(ko||[]).filter(m=>m.id!=null && MATCHNUMS[m.id]==null);
+  if(!missing.length) return false;
+  const base='https://sports.core.api.espn.com/v2/sports/soccer/leagues/fifa.world/events/';
+  const res=await Promise.allSettled(missing.map(m=>
+    fetch(base+m.id+'/competitions/'+m.id,{cache:'force-cache'}).then(r=>r.json()).then(d=>({id:m.id,n:d&&d.matchNumber}))));
+  let got=false;
+  res.forEach(r=>{ if(r.status==='fulfilled'&&r.value&&r.value.n!=null){ MATCHNUMS[r.value.id]=r.value.n; got=true; } });
+  if(got){ try{localStorage.setItem('wc26.matchnums',JSON.stringify(MATCHNUMS))}catch(e){} attachMatchNums(ko); }
+  return got;
+}
 function buildKnockout(sb){
   return (sb.events||[]).map(ev=>{
     const code=KO_CODE[ev.season&&ev.season.slug]; if(!code) return null;
@@ -873,7 +889,7 @@ function buildKnockout(sb){
     const venue=(c.venue&&c.venue.fullName)||(ev.venue&&ev.venue.fullName)||'';
     // ESPN numbers knockout matches by event id (e.g. "Round of 32 3 Winner" = the
     // 3rd R32 match in id order), which is the official bracket order — NOT kickoff order.
-    return {round:code, id:+ev.id||null, date:localIsoFromDate(dt), kickoffMs:dt.getTime(), ko:koFromDate(dt), venue, goals:parseGoals(c),
+    return {round:code, id:+ev.id||null, matchNumber:(MATCHNUMS[ev.id]!=null?MATCHNUMS[ev.id]:null), date:localIsoFromDate(dt), kickoffMs:dt.getTime(), ko:koFromDate(dt), venue, goals:parseGoals(c),
       state:t.state||'pre', decided:t.state==='post', home:mk(home), away:mk(away)};
   }).filter(Boolean).sort((a,b)=>a.kickoffMs-b.kickoffMs);
 }
@@ -944,9 +960,9 @@ function projectedRound(state){
 function buildBracketTree(matches, picks){
   picks=picks||{};
   const ROUNDS=['R32','R16','QF','SF','FINAL'];
-  // Index each round by official match number: ESPN's event id when present
-  // (the order its "Round of X N Winner" feeders refer to), else kickoff order.
-  const seq=m=>m.id!=null?m.id:m.kickoffMs;
+  // Index each round by official FIFA match number (what "Round of X N Winner"
+  // feeders refer to); fall back to event id, then kickoff order.
+  const seq=m=>m.matchNumber!=null?m.matchNumber:(m.id!=null?m.id:m.kickoffMs);
   const byKO={};
   ROUNDS.forEach(r=>{ byKO[r]=(matches||[]).filter(m=>m.round===r).slice().sort((a,b)=>seq(a)-seq(b)); });
   if(!byKO.R32.length) return null;
@@ -1096,6 +1112,8 @@ async function refresh(quiet){
     if(window.__DEMO && !STATE.knockout.length) STATE.knockout=demoKnockout();   // keep demo bracket alive pre-R32
     pruneResults();
     renderAll();
+    // backfill official FIFA match numbers (core API, cached) so bracket feeders index correctly
+    ensureMatchNumbers(STATE.knockout).then(changed=>{ if(changed) renderAll(); }).catch(()=>{});
     const t=new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'});
     const liveN=STATE.today.filter(m=>m.state==='in').length;
     setStatus('live','Live'+(liveN?' · '+liveN+' in play':'')+' · updated '+t);
